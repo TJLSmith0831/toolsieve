@@ -20,5 +20,5 @@ toolsieve.local.json
 # machine-specific: contains absolute paths to your MCP servers
 toolsieve.config.*
 
-.claude
+.claude/
 openspec/
