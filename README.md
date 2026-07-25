@@ -148,11 +148,6 @@ out of 15 it saves ~80%. Token counts are estimates (~4 chars/token), but
 `saved_pct` is exact — both sides are measured identically, so the estimator
 cancels out.
 
-## Non-goals (v1)
-
-Remote/HTTP downstream servers (stdio only) · auth beyond local trust ·
-auto-discovery of servers not in your config · multi-tenant/hosted operation.
-
 ## Development
 
 ```bash
