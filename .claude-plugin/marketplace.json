@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "toolsieve",
+  "description": "Semantic tool routing across your aggregated MCP servers.",
+  "owner": { "name": "Tristan Smith" },
+  "plugins": [
+    {
+      "name": "toolsieve",
+      "description": "Aggregates your MCP servers and exposes three tools instead of hundreds, with a live token-savings receipt.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

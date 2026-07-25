@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# fastembed downloads its ONNX models here
+.fastembed_cache/
+.cache/
+
+# local runtime config / index artifacts
+toolsieve.local.json
+*.local.json
+
+# machine-specific: contains absolute paths to your MCP servers
+toolsieve.config.*
+
+.claude
+openspec/

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "toolsieve": {
+      "command": "uv",
+      "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "-m", "toolsieve"],
+      "env": {
+        "TOOLSIEVE_CONFIG": "${HOME}/.toolsieve/config.json"
+      }
+    }
+  }
+}

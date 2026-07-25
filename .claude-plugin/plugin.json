@@ -1,0 +1,11 @@
+{
+  "name": "toolsieve",
+  "version": "0.1.0",
+  "description": "Semantic tool routing across your MCP servers. Exposes three tools instead of hundreds, and reports the token savings live.",
+  "author": { "name": "Tristan Smith" },
+  "homepage": "https://github.com/TJLSmith0831/toolsieve",
+  "repository": "https://github.com/TJLSmith0831/toolsieve",
+  "license": "MIT",
+  "keywords": ["mcp", "tools", "routing", "embeddings", "context"],
+  "skills": "./skills/"
+}

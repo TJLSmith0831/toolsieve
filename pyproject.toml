@@ -1,0 +1,18 @@
+[project]
+name = "toolsieve"
+version = "0.1.0"
+description = "Semantic tool routing for MCP: aggregate your downstream MCP servers, expose three tools instead of a hundred, and get a live token-savings receipt."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0",
+    # fastembed brings numpy + onnxruntime; cosine top-k is done directly (D9 amended)
+    "fastembed>=0.5",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = ["pytest>=8.0"]

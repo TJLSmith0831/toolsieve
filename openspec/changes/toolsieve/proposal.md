@@ -24,7 +24,7 @@ Agents connected to several MCP servers get every tool from every server dumped 
 
 ## Impact
 
-- New standalone repository, Python, using the standalone `fastmcp` package (jlowin/fastmcp) for the server and for backend-connection/proxy plumbing to downstream servers, plus `semantic-router`/`fastembed` for embedding-based matching (adapted from day-13-smart-tool-selector, not its OpenAI-Agents-SDK harness).
+- New standalone repository, Python, using the standalone `fastmcp` package (jlowin/fastmcp) for the server and for backend-connection/proxy plumbing to downstream servers, plus `fastembed` (+ a numpy cosine top-k) for embedding-based matching (the embedding engine adapted from day-13-smart-tool-selector, not its OpenAI-Agents-SDK harness or its `semantic-router` utterance model — see D9 amended).
 - References day-08-docs-mcp and day-09-cached-weather-mcp from this monorepo as read-only demo downstream servers — no changes made to those days.
 - No impact on existing 50-days-of-dev specs (`agent-loop`, `claude-code-handoff`, `context-management`, `grilling-integration`, `repl-interface`, `repo-doctor`, `session-management`, `tool-system`) — unrelated prior work, untouched.
 - Day 14's tracker entry and README update in this monorepo point at the new repo once shipped.

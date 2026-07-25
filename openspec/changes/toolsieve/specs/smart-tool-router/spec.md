@@ -7,9 +7,13 @@ The system SHALL expose a `find_tools(query, k=3)` tool that embeds the query an
 - **WHEN** find_tools is called with a query relevant to an aggregated tool's name/description
 - **THEN** the response SHALL include that tool among the top-k matches, with its owning server, description, and input schema
 
-#### Scenario: Query matches nothing
-- **WHEN** find_tools is called with a query that clears no aggregated tool's similarity floor
-- **THEN** the response SHALL be an explicit empty match list with a message indicating no tool matched, rather than the top-k regardless of relevance
+#### Scenario: Query matches only weakly
+- **WHEN** find_tools is called with a query whose best match scores below the confidence threshold
+- **THEN** the response SHALL still return the best available matches, each tagged as low confidence with its score and a message noting the match is uncertain, rather than withholding a usable tool from the client
+
+#### Scenario: Client rejects a returned tool
+- **WHEN** find_tools is called with a tool named in its `exclude` list
+- **THEN** that tool SHALL be omitted from the matches, so a tool is only withheld when the client explicitly says it was wrong
 
 ### Requirement: Tool call proxying via call_tool
 The system SHALL expose a `call_tool(server, tool_name, args)` tool that forwards the invocation to the named downstream server and returns its result.
