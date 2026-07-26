@@ -65,46 +65,51 @@ That second chart is measured against loading every tool into context, which is
 the ceiling — it scores 100% by definition, because it never chooses. Getting to
 94% savings costs you two points of that. Getting to 98.3% costs fifteen.
 
-In absolute terms, at 181 tools a `find_tools` call carries **244 tokens instead
-of 14,418**.
+In absolute terms: at 50 tools a `find_tools` call carries **241 tokens instead
+of 4,010**. At 181, **244 instead of 14,418**.
 
 ### Why not just keyword matching?
 
 Because it falls apart on the queries real users actually type:
 
 ```
-  Right tool found, 181-tool catalog
-    toolsieve   █████████████████████████████████▉           85%
-    BM25        ██████████████████████████▏                  65%
+  Right tool found, 50-tool catalog
+    toolsieve   ███████████████████████████████████████▎     98%
+    BM25        ██████████████████████████████▌              76%
 
   …when the query shares no wording with the tool
-    toolsieve   ████████████████████████████▏                70%
-    BM25        ████████████▉                                32%
+    toolsieve   █████████████████████████████████████▉       95%
+    BM25        ██████████████████▉                          47%
+                ├─────────┬─────────┬─────────┬─────────┤
+                0%       25%       50%       75%     100%
 ```
 
-*"Bill this Stripe client for the work we did"* against **Create an invoice for a
-Stripe customer** — no shared words, nothing for BM25 to grip. Semantic matching
-more than doubles it, at the same token cost.
+*"Remember for later that Alice works at Acme"* against **Create multiple new
+entities in the knowledge graph** — not one word in common. BM25 has nothing to
+match on. Semantic matching doubles its accuracy on queries like these, and does
+it for fewer tokens per call, not more.
 
-### Token burn
+### What a correct answer costs
+
+Tokens alone don't settle it — a cheap call that routes to the wrong tool isn't a
+saving. Divide tokens per call by how often the method actually finds the tool,
+and you get the real unit price:
 
 ```
-  Tokens per find_tools call, 181-tool catalog
-    naive       ████████████████████████████████████████   14,418
-    BM25        ▋                                             240
-    toolsieve   ▋                                             244
+  Tokens spent per correctly routed query, 50-tool catalog
+    naive       ████████████████████████████████████████   4,010
+    BM25        ███▎                                         328
+    toolsieve   ██▍                                          246
                 ├───────────────────────────────────────┤
-                0                                  14,418
+                0                                   4,010
 ```
 
-Both routers burn the same — they hand over three tools, so they cost what three
-tools cost. That is the point of the last two charts: **the token bill is set by
-routing at all, the accuracy is set by routing well.** Picking toolsieve over
-BM25 costs you four tokens a call and buys back nineteen points of recall —
-thirty-eight of them on paraphrased queries.
+**toolsieve is the most accurate *and* the cheapest of the three** — 25% less per
+correct answer than BM25, 16× less than loading the catalog. It wins on both axes
+at once, which is the whole claim in one bar chart.
 
-Against no routing, it's **59× less**: over the full 159-query run, 2.29M tokens
-becomes 38.8K.
+*(Derived: tokens-per-call ÷ recall. The raw columns behind it are in the results
+table.)*
 
 Full per-size table, difficulty breakdown, methodology, and how to reproduce:
 **[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**.
