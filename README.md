@@ -35,50 +35,58 @@ And it shows its work. Every response carries a token-savings receipt.
 **181 tools from 25 real MCP servers** (GitHub, Slack, Notion, Linear, Stripe,
 Supabase, Playwright, Postgres and more), 159 queries with a known correct tool.
 
-### Does it pick the right tool?
+> **Up to 25 tools, routing is free.** toolsieve finds exactly what loading the
+> whole catalog would — same 100% — on **12% of the tokens**. At 50 tools it
+> still finds the right tool **98%** as often, on **6% of the tokens**.
+
+### Savings climb fast. Accuracy barely moves.
+
+Both charts are on the same scale, so you can read one against the other:
 
 ```
-  all 159 queries
-    naive      ████████████████████████████████████████     100%
-    BM25       ██████████████████████████                    65%
-    toolsieve  ██████████████████████████████████            85%
+  Tokens saved — climbs steeply with catalog size
+     10 tools   ██████████████████████████▋                66.7%
+     25 tools   ███████████████████████████████████        87.7%
+     50 tools   █████████████████████████████████████▌     94.0%
+    100 tools   ██████████████████████████████████████▊    96.9%
+    181 tools   ███████████████████████████████████████▎   98.3%
 
-  no wording shared with the tool (71 queries)
-    naive      ████████████████████████████████████████     100%
-    BM25       ████████████▊                                 32%
-    toolsieve  ████████████████████████████                  70%
-               ├─────────┬─────────┬─────────┬─────────┤
-               0%       25%       50%       75%     100%
+  Right tool still found — barely moves
+     10 tools   ████████████████████████████████████████    100%
+     25 tools   ████████████████████████████████████████    100%
+     50 tools   ███████████████████████████████████████▎     98%
+    100 tools   ████████████████████████████████████▉        92%
+    181 tools   █████████████████████████████████▉           85%
+                ├─────────┬─────────┬─────────┬─────────┤
+                0%       25%       50%       75%     100%
 ```
 
-The second group is the one that matters. When a query shares no wording with
-the tool's description — *"Bill this Stripe client for the work we did"* against
-**Create an invoice for a Stripe customer** — keyword matching has nothing to
-grip and drops to 32%. Semantic matching more than doubles it.
+That second chart is measured against loading every tool into context, which is
+the ceiling — it scores 100% by definition, because it never chooses. Getting to
+94% savings costs you two points of that. Getting to 98.3% costs fifteen.
 
-Naive scores 100% because it never chooses: it ships the entire catalog and lets
-the model sort it out. Which is what the second chart is about.
+In absolute terms, at 181 tools a `find_tools` call carries **244 tokens instead
+of 14,418**.
 
-### What does it cost?
+### Why not just keyword matching?
 
-Tokens loaded into the model's context per `find_tools` call:
+Because it falls apart on the queries real users actually type:
 
 ```
-    naive      ████████████████████████████████████████   14,418
-    BM25       ▋                                             240
-    toolsieve  ▋                                             244
-               ├───────────────────┬───────────────────┤
-               0                 7,200            14,418
+  Right tool found, 181-tool catalog
+    toolsieve   █████████████████████████████████▉           85%
+    BM25        ██████████████████████████▏                  65%
+
+  …when the query shares no wording with the tool
+    toolsieve   ████████████████████████████▏                70%
+    BM25        ████████████▉                                32%
 ```
 
-**1.7% of the tokens** — 244 instead of 14,418, for 85% of the accuracy. That
-gap widens with the catalog: 67% saved at 10 tools, 94% at 50, 98.3% at 181.
+*"Bill this Stripe client for the work we did"* against **Create an invoice for a
+Stripe customer** — no shared words, nothing for BM25 to grip. Semantic matching
+more than doubles it, at the same token cost.
 
-Both routers cost about the same; they differ only in *which* three tools they
-hand over, and the first chart is where that shows up. If your catalog is small
-enough that context isn't a constraint, no router beats no routing.
-
-Per-size curve, difficulty breakdown, methodology, and how to reproduce:
+Full per-size table, difficulty breakdown, methodology, and how to reproduce:
 **[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**.
 
 ## How it works
