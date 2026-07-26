@@ -20,7 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from toolsieve.aggregator import Aggregator, DownstreamError  # noqa: E402
-from toolsieve.config import ConfigError, load_config  # noqa: E402
+from toolsieve.config import ConfigError, ServerConfig, load_config  # noqa: E402
 from toolsieve.router import Router, Savings, saved_pct  # noqa: E402
 
 FAKE = str(Path(__file__).resolve().parent / "fake_server.py")
@@ -104,6 +104,7 @@ def test_config_rejects_both_transports(tmp_path):
 
 
 def test_env_refs_expand_in_headers_and_url(tmp_path, monkeypatch):
+    """Expansion happens at connect time, so the config keeps the raw ${VAR}."""
     monkeypatch.setenv("TS_TEST_TOKEN", "s3cret")
     monkeypatch.setenv("TS_TEST_KEY", "abc123")
     cfg = write_config(
@@ -116,19 +117,52 @@ def test_env_refs_expand_in_headers_and_url(tmp_path, monkeypatch):
         },
     )
     (server,) = load_config(cfg)
-    assert server.headers == {"Authorization": "Bearer s3cret"}
-    assert server.url.endswith("apiKey=abc123")
+    assert server.url.endswith("apiKey=${TS_TEST_KEY}")  # unexpanded on disk
+
+    transport = Aggregator._transport(server)
+    assert transport.headers == {"Authorization": "Bearer s3cret"}
+    assert str(transport.url).endswith("apiKey=abc123")
 
 
-def test_unset_env_ref_is_an_error_not_an_empty_token(tmp_path, monkeypatch):
+def test_unset_env_ref_is_an_error_not_an_empty_token(monkeypatch):
     """Substituting "" would send an unauthenticated request and surface as a 401."""
+    monkeypatch.delenv("TS_TEST_MISSING", raising=False)
+    server = ServerConfig(
+        name="linear",
+        url="https://x.test/mcp",
+        headers={"Authorization": "${TS_TEST_MISSING}"},
+    )
+    with pytest.raises(ConfigError, match="TS_TEST_MISSING"):
+        Aggregator._transport(server)
+
+
+def test_unset_env_ref_costs_one_server_not_the_catalog(tmp_path, monkeypatch, http_url):
+    """One stale token must not blank servers that never referenced it (D13).
+
+    Expanding at load time made this fail for the whole file — a config with ten
+    servers and one bad token aggregated nothing at all.
+    """
     monkeypatch.delenv("TS_TEST_MISSING", raising=False)
     cfg = write_config(
         tmp_path / "c.json",
-        {"linear": {"url": "https://x.test/mcp", "headers": {"Authorization": "${TS_TEST_MISSING}"}}},
+        {
+            "ok": good("ok"),
+            "remote": {"url": http_url},
+            "broken": {"url": http_url, "headers": {"Authorization": "${TS_TEST_MISSING}"}},
+        },
     )
-    with pytest.raises(ConfigError, match="TS_TEST_MISSING"):
-        load_config(cfg)
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            return sorted({t.server for t in agg.catalog.tools}), dict(agg.catalog.failed)
+        finally:
+            await agg.stop()
+
+    servers, failed = asyncio.run(run())
+    assert servers == ["ok", "remote"]  # unaffected servers still aggregate
+    assert "TS_TEST_MISSING" in failed["broken"]  # and the cause is named
 
 
 # --- aggregation (mcp-aggregation spec) ----------------------------------------
@@ -505,3 +539,32 @@ def test_server_end_to_end(tmp_path):
     assert called["ok"] is True
     assert called["result"] == "sunny in Boston"  # structured payload survived
     assert report["find_tools_calls"] == 1
+
+
+def test_failed_server_is_visible_to_the_client(tmp_path):
+    """stderr logs are invisible to an MCP client — a dead backend must not be.
+
+    With remote servers this is the common case: expired token, moved endpoint,
+    network. The client has to be told why its tools disappeared.
+    """
+    import os
+
+    from fastmcp import Client
+    from fastmcp.client.transports import StdioTransport
+
+    root = Path(__file__).resolve().parents[1]
+    cfg = write_config(tmp_path / "c.json", {"ok": good("ok"), "dead": BROKEN})
+
+    async def run():
+        transport = StdioTransport(
+            command=sys.executable,
+            args=["-m", "toolsieve"],
+            cwd=str(root),
+            env={**os.environ, "TOOLSIEVE_CONFIG": str(cfg)},
+        )
+        async with Client(transport) as client:
+            return (await client.call_tool("get_savings_report", {})).data
+
+    report = asyncio.run(run())
+    assert "dead" in report["unavailable_servers"]
+    assert report["tools_aggregated"] == 2  # the healthy server is still usable

@@ -23,7 +23,7 @@ from fastmcp.client.transports import (
     StreamableHttpTransport,
 )
 
-from .config import ServerConfig, load_config
+from .config import ConfigError, ServerConfig, expand_env, load_config
 
 log = logging.getLogger("toolsieve")
 
@@ -178,8 +178,15 @@ class Aggregator:
         it is reimplemented here only because that helper takes no headers.
         """
         if server.url is not None:
-            http = SSETransport if server.url.rstrip("/").endswith("/sse") else StreamableHttpTransport
-            return http(url=server.url, headers=server.headers)
+            # Expanded here, not at load time, so an unset ${VAR} fails this one
+            # server through the isolation path below rather than the whole file.
+            url = expand_env(server.url, server=server.name, where="'url'")
+            headers = {
+                key: expand_env(value, server=server.name, where=f"header '{key}'")
+                for key, value in (server.headers or {}).items()
+            }
+            http = SSETransport if url.rstrip("/").endswith("/sse") else StreamableHttpTransport
+            return http(url=url, headers=headers or None)
         return StdioTransport(
             command=server.command,
             args=server.args,
@@ -204,7 +211,9 @@ class Aggregator:
             client = await self._connect(stack, server)
             return client, await client.list_tools()
         except Exception as exc:  # noqa: BLE001 — decide by transport, then re-raise
-            if not server.is_http:
+            # A ConfigError here is an unset ${VAR} — deterministic, so retrying
+            # only delays a failure this server is going to get either way.
+            if not server.is_http or isinstance(exc, ConfigError):
                 raise
             log.info("server %r did not answer (%s), retrying once", server.name, exc)
             await asyncio.sleep(HTTP_RETRY_SECONDS)

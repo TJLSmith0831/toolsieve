@@ -63,8 +63,9 @@ For each `!` server, ask the user which it is:
   }
   ```
 
-  `${VAR}` is read from the environment toolsieve runs in. An unset variable is a
-  startup error naming the variable — never a silent unauthenticated call.
+  `${VAR}` is read from the environment toolsieve runs in. If it is unset, that
+  one server fails with an error naming the variable — never a silent
+  unauthenticated call, and never at the expense of the user's other servers.
 
 - **OAuth-only, no token available** — say so plainly and leave it in the client
   config. toolsieve cannot proxy an OAuth session it does not hold.

@@ -116,8 +116,9 @@ Servers marked ! are HTTP with no auth headers in the client config.
         "headers": { "Authorization": "Bearer ${MYSERVER_TOKEN}" }
       }
 
-    ${VAR} is read from the environment toolsieve runs in. An unset variable is
-    a startup error naming the variable — never a silent unauthenticated call.
+    ${VAR} is read from the environment toolsieve runs in. If it is unset, that
+    one server fails with an error naming the variable — never a silent
+    unauthenticated call, and never at the expense of your other servers.
     Keep the token in your shell profile or secret manager, not in this file.
 
   After adding a token, verify with:

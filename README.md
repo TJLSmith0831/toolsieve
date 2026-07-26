@@ -95,9 +95,10 @@ servers that want their key in a query string:
 "ref": { "url": "https://api.ref.tools/mcp?apiKey=${REF_API_KEY}" }
 ```
 
-An unset variable is a startup error naming the variable — toolsieve will not
-substitute an empty string and fire off an unauthenticated request. **Keep tokens
-in your shell profile or secret manager, not in this file.**
+If the variable is unset, that one server fails with an error naming it —
+toolsieve will not substitute an empty string and fire off an unauthenticated
+request, and your other servers are unaffected. **Keep tokens in your shell
+profile or secret manager, not in this file.**
 
 **OAuth is not supported.** If your client authenticated a server through an
 OAuth flow, that token lives in the client's own credential store and toolsieve

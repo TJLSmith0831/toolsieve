@@ -75,6 +75,15 @@ async def main() -> int:
 
         rule("3. Calling one for real")
         found = (await client.call_tool("find_tools", {"query": QUERIES[0]})).data
+        if not found["matches"]:
+            # An empty catalog is the normal shape of a misconfigured run — a bad
+            # config, an unset ${VAR}, every backend down. Say which, don't crash.
+            print(f"  nothing to call: {found.get('message', 'the catalog is empty')}")
+            if found.get("config_error"):
+                print(f"  config error: {found['config_error']}")
+            for name, reason in (found.get("unavailable_servers") or {}).items():
+                print(f"  server {name!r} unavailable: {reason}")
+            return 1
         top = found["matches"][0]
         # The schema comes back with the match — that is why call_tool takes args
         # instead of guessing them from the query (D10).

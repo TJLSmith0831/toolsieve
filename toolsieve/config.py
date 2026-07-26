@@ -101,15 +101,16 @@ def load_config(path: str | os.PathLike[str]) -> list[ServerConfig]:
             headers = entry.get("headers") or {}
             if not isinstance(headers, dict):
                 raise ConfigError(f"server '{name}': 'headers' must be a JSON object")
+            # ${VAR} is left unexpanded here on purpose. Expansion happens at
+            # connect time (aggregator._transport) so an unset variable fails
+            # that one server through the existing isolation path (D13). Doing
+            # it here would raise for the whole file, and one stale token would
+            # blank a catalog of servers that never referenced it.
             out.append(
                 ServerConfig(
                     name=name,
-                    url=expand_env(str(url), server=name, where="'url'"),
-                    headers={
-                        str(k): expand_env(str(v), server=name, where=f"header '{k}'")
-                        for k, v in headers.items()
-                    }
-                    or None,
+                    url=str(url),
+                    headers={str(k): str(v) for k, v in headers.items()} or None,
                 )
             )
             continue
