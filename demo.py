@@ -44,7 +44,7 @@ async def main() -> int:
         return 1
 
     servers = json.loads(CONFIG.read_text()).get("mcpServers", {})
-    print(f"toolsieve demo — aggregating {len(servers)} server(s) from {CONFIG.name}")
+    print(f"toolsieve demo — {len(servers)} server(s) configured in {CONFIG.name}")
     if CONFIG.name == "toolsieve.config.demo.json":
         print("  (bundled demo catalog — set TOOLSIEVE_CONFIG to route across your own servers)")
 
@@ -59,8 +59,15 @@ async def main() -> int:
         report = (await client.call_tool("get_savings_report", {})).data
 
         rule("1. What the client actually sees")
-        print(f"  {report['tools_aggregated']} tools aggregated across {len(servers)} servers")
+        # Count what actually connected, not what the config asked for. Partial
+        # failure is a normal, survivable state — a remote server can be down or
+        # holding an expired token — so a green line here would be a lie.
+        unavailable = report.get("unavailable_servers") or {}
+        connected = len(servers) - len(unavailable)
+        print(f"  {report['tools_aggregated']} tools aggregated across {connected} servers")
         print(f"  {len(exposed)} tools exposed: {', '.join(exposed)}")
+        for name, reason in unavailable.items():
+            print(f"  ⚠ {name} unavailable, its tools are missing: {reason}")
 
         rule("2. Semantic routing")
         for query in QUERIES:

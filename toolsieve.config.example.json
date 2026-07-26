@@ -1,5 +1,5 @@
 {
-  "_comment": "Transport is inferred per entry: 'command' = local stdio process, 'url' = remote HTTP/SSE. ${VAR} in a url or header value is read from the environment toolsieve runs in; an unset variable is a startup error, never a silent unauthenticated request. Keep tokens in your shell profile, not in this file.",
+  "_comment": "Transport is inferred per entry: 'command' = local stdio process, 'url' = remote HTTP/SSE. ${VAR} in a url or header value is read from the environment toolsieve runs in; if it is unset, that one server fails with an error naming the variable, never a silent unauthenticated request and never at the expense of your other servers. Keep tokens in your shell profile, not in this file.",
   "mcpServers": {
     "docs": {
       "command": "node",
