@@ -19,6 +19,10 @@ toolsieve.local.json
 
 # machine-specific: contains absolute paths to your MCP servers
 toolsieve.config.*
+# ...except the two the docs ship: the demo config uses repo-relative paths, and
+# demo.py falls back to it so `uv run python demo.py` works on a fresh clone.
+!toolsieve.config.example.json
+!toolsieve.config.demo.json
 
 .claude/
 openspec/

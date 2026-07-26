@@ -1,6 +1,6 @@
 [project]
 name = "toolsieve"
-version = "0.1.0"
+version = "0.2.0"
 description = "Semantic tool routing for MCP: aggregate your downstream MCP servers, expose three tools instead of a hundred, and get a live token-savings receipt."
 readme = "README.md"
 license = "MIT"
@@ -16,3 +16,6 @@ package = false
 
 [dependency-groups]
 dev = ["pytest>=8.0"]
+# Benchmark-only (D4). Never a runtime dependency of the MCP server: real BM25
+# and a real tokenizer are what make the published numbers defensible.
+bench = ["tiktoken>=0.7", "rank-bm25>=0.2.2"]

@@ -1,9 +1,9 @@
 """Downstream server aggregation (D8, D13).
 
-Connects out to every configured stdio MCP server, collects its real published
-tool list, and holds the connections open so calls can be proxied through.
-Failures are isolated per-server: one unreachable backend costs you that
-backend's tools, not the whole catalog.
+Connects out to every configured MCP server — stdio or HTTP/SSE (issue #1) —
+collects its real published tool list, and holds the connections open so calls
+can be proxied through. Failures are isolated per-server: one unreachable
+backend costs you that backend's tools, not the whole catalog.
 """
 
 from __future__ import annotations
@@ -16,13 +16,19 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import Client
-from fastmcp.client.transports import StdioTransport
+from fastmcp.client.transports import (
+    ClientTransport,
+    SSETransport,
+    StdioTransport,
+    StreamableHttpTransport,
+)
 
-from .config import ServerConfig, load_config
+from .config import ConfigError, ServerConfig, expand_env, load_config
 
 log = logging.getLogger("toolsieve")
 
 RELOAD_POLL_SECONDS = 1.0
+HTTP_RETRY_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -126,8 +132,7 @@ class Aggregator:
 
         for server in servers:
             try:
-                client = await self._connect(stack, server)
-                published = await client.list_tools()
+                client, published = await self._connect_and_list(stack, server)
             except Exception as exc:  # noqa: BLE001 — isolation is the point (D13)
                 log.warning("server %r unavailable, skipping its tools: %s", server.name, exc)
                 failed[server.name] = str(exc)
@@ -166,14 +171,54 @@ class Aggregator:
         )
 
     @staticmethod
-    async def _connect(stack: AsyncExitStack, server: ServerConfig) -> Client:
-        transport = StdioTransport(
+    def _transport(server: ServerConfig) -> ClientTransport:
+        """Pick a transport from the config shape (issue #1).
+
+        The `/sse` suffix rule is fastmcp's own `infer_transport` convention;
+        it is reimplemented here only because that helper takes no headers.
+        """
+        if server.url is not None:
+            # Expanded here, not at load time, so an unset ${VAR} fails this one
+            # server through the isolation path below rather than the whole file.
+            url = expand_env(server.url, server=server.name, where="'url'")
+            headers = {
+                key: expand_env(value, server=server.name, where=f"header '{key}'")
+                for key, value in (server.headers or {}).items()
+            }
+            http = SSETransport if url.rstrip("/").endswith("/sse") else StreamableHttpTransport
+            return http(url=url, headers=headers or None)
+        return StdioTransport(
             command=server.command,
             args=server.args,
             env=server.env,
             cwd=server.cwd,
         )
-        return await stack.enter_async_context(Client(transport))
+
+    async def _connect(self, stack: AsyncExitStack, server: ServerConfig) -> Client:
+        return await stack.enter_async_context(Client(self._transport(server)))
+
+    async def _connect_and_list(
+        self, stack: AsyncExitStack, server: ServerConfig
+    ) -> tuple[Client, list[Any]]:
+        """Connect and read the tool list, allowing a remote endpoint one retry.
+
+        A remote endpoint gets one transient blip forgiven at startup — otherwise
+        a momentary network hiccup silently costs you that whole server until the
+        config file next changes. A bad stdio command is deterministic, so
+        retrying it only adds latency to a failure you are going to get anyway.
+        """
+        try:
+            client = await self._connect(stack, server)
+            return client, await client.list_tools()
+        except Exception as exc:  # noqa: BLE001 — decide by transport, then re-raise
+            # A ConfigError here is an unset ${VAR} — deterministic, so retrying
+            # only delays a failure this server is going to get either way.
+            if not server.is_http or isinstance(exc, ConfigError):
+                raise
+            log.info("server %r did not answer (%s), retrying once", server.name, exc)
+            await asyncio.sleep(HTTP_RETRY_SECONDS)
+            client = await self._connect(stack, server)
+            return client, await client.list_tools()
 
     @staticmethod
     async def _close(stack: AsyncExitStack | None) -> None:
@@ -197,7 +242,30 @@ class Aggregator:
         try:
             return await client.call_tool(tool_name, args)
         except Exception as exc:  # noqa: BLE001 — name the failing server (D13)
-            raise DownstreamError(f"call to '{tool_name}' on server '{server}' failed: {exc}") from exc
+            http = isinstance(client.transport, (SSETransport, StreamableHttpTransport))
+            # Retry only a genuinely dead session. A still-connected client failed
+            # for a reason reconnecting cannot fix — bad arguments, an unknown
+            # tool, the server's own error — and retrying those would run a
+            # side-effecting tool a second time. Ask the session rather than
+            # pattern-matching exception types: client-side argument validation
+            # never reaches the wire, so the exception type alone can't tell you.
+            if not http or client.is_connected():
+                raise DownstreamError(
+                    f"call to '{tool_name}' on server '{server}' failed: {exc}"
+                ) from exc
+            # A long-lived HTTP session is dropped by idle timeouts, proxies and
+            # redeploys — routine, and invisible until the next call. Retry once
+            # on a fresh session over the same transport. Entered and closed in
+            # this task, so it never crosses the aggregator's cancel scope.
+            log.info("server %r HTTP session failed (%s), reconnecting once", server, exc)
+            try:
+                async with Client(client.transport) as reconnected:
+                    return await reconnected.call_tool(tool_name, args)
+            except Exception as retry_exc:  # noqa: BLE001 — report the retry, not the stale first failure
+                raise DownstreamError(
+                    f"call to '{tool_name}' on server '{server}' failed, "
+                    f"and failed again after reconnecting: {retry_exc}"
+                ) from retry_exc
 
     async def _watch_config(self) -> None:
         """Re-aggregate when the config file changes (D8).

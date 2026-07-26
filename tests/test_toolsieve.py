@@ -1,14 +1,18 @@
 """One check per spec scenario. Run: uv run pytest -q
 
-Downstream backends are real stdio MCP servers (tests/fake_server.py), not mocks —
-the whole point of toolsieve is that it aggregates real ones.
+Downstream backends are real MCP servers (tests/fake_server.py) over real
+transports — stdio and HTTP — not mocks. The whole point of toolsieve is that it
+aggregates real ones, so a mock would be testing the wrong thing.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import socket
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -16,7 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from toolsieve.aggregator import Aggregator, DownstreamError  # noqa: E402
-from toolsieve.config import ConfigError, load_config  # noqa: E402
+from toolsieve.config import ConfigError, ServerConfig, load_config  # noqa: E402
 from toolsieve.router import Router, Savings, saved_pct  # noqa: E402
 
 FAKE = str(Path(__file__).resolve().parent / "fake_server.py")
@@ -34,12 +38,46 @@ def good(name: str = "docs") -> dict:
 BROKEN = {"command": sys.executable, "args": ["-c", "raise SystemExit(1)"]}
 
 
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+@pytest.fixture(scope="module")
+def http_url():
+    """A real HTTP MCP server on localhost for the duration of the module.
+
+    Real transport and a real MCP handshake, but no network egress — so the
+    suite still passes on a plane and in CI without outbound access.
+    """
+    port = free_port()
+    proc = subprocess.Popen([sys.executable, FAKE, "remote", "--http", str(port)])
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(f"fake http server exited early with {proc.returncode}")
+        with socket.socket() as probe:
+            probe.settimeout(0.2)
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                break
+        time.sleep(0.1)
+    else:
+        proc.kill()
+        raise RuntimeError("fake http server never came up")
+    try:
+        yield f"http://127.0.0.1:{port}/mcp"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
 # --- config loading (task 2.1) -------------------------------------------------
 
 
-def test_config_rejects_entry_without_command(tmp_path):
+def test_config_rejects_entry_with_no_transport(tmp_path):
     cfg = write_config(tmp_path / "c.json", {"docs": {"args": ["x"]}})
-    with pytest.raises(ConfigError, match="missing 'command'"):
+    with pytest.raises(ConfigError, match="'command'.*'url'"):
         load_config(cfg)
 
 
@@ -47,6 +85,84 @@ def test_config_rejects_missing_mcpservers_key(tmp_path):
     (tmp_path / "c.json").write_text('{"servers": {}}')
     with pytest.raises(ConfigError, match="mcpServers"):
         load_config(tmp_path / "c.json")
+
+
+# --- http config loading (issue #1) --------------------------------------------
+
+
+def test_url_entry_loads_as_http(tmp_path):
+    cfg = write_config(tmp_path / "c.json", {"linear": {"url": "https://example.test/mcp"}})
+    (server,) = load_config(cfg)
+    assert server.is_http and server.url == "https://example.test/mcp"
+    assert server.command is None
+
+
+def test_config_rejects_both_transports(tmp_path):
+    cfg = write_config(tmp_path / "c.json", {"x": {"command": "uv", "url": "https://a.test/mcp"}})
+    with pytest.raises(ConfigError, match="pick one transport"):
+        load_config(cfg)
+
+
+def test_env_refs_expand_in_headers_and_url(tmp_path, monkeypatch):
+    """Expansion happens at connect time, so the config keeps the raw ${VAR}."""
+    monkeypatch.setenv("TS_TEST_TOKEN", "s3cret")
+    monkeypatch.setenv("TS_TEST_KEY", "abc123")
+    cfg = write_config(
+        tmp_path / "c.json",
+        {
+            "linear": {
+                "url": "https://example.test/mcp?apiKey=${TS_TEST_KEY}",
+                "headers": {"Authorization": "Bearer ${TS_TEST_TOKEN}"},
+            }
+        },
+    )
+    (server,) = load_config(cfg)
+    assert server.url.endswith("apiKey=${TS_TEST_KEY}")  # unexpanded on disk
+
+    transport = Aggregator._transport(server)
+    assert transport.headers == {"Authorization": "Bearer s3cret"}
+    assert str(transport.url).endswith("apiKey=abc123")
+
+
+def test_unset_env_ref_is_an_error_not_an_empty_token(monkeypatch):
+    """Substituting "" would send an unauthenticated request and surface as a 401."""
+    monkeypatch.delenv("TS_TEST_MISSING", raising=False)
+    server = ServerConfig(
+        name="linear",
+        url="https://x.test/mcp",
+        headers={"Authorization": "${TS_TEST_MISSING}"},
+    )
+    with pytest.raises(ConfigError, match="TS_TEST_MISSING"):
+        Aggregator._transport(server)
+
+
+def test_unset_env_ref_costs_one_server_not_the_catalog(tmp_path, monkeypatch, http_url):
+    """One stale token must not blank servers that never referenced it (D13).
+
+    Expanding at load time made this fail for the whole file — a config with ten
+    servers and one bad token aggregated nothing at all.
+    """
+    monkeypatch.delenv("TS_TEST_MISSING", raising=False)
+    cfg = write_config(
+        tmp_path / "c.json",
+        {
+            "ok": good("ok"),
+            "remote": {"url": http_url},
+            "broken": {"url": http_url, "headers": {"Authorization": "${TS_TEST_MISSING}"}},
+        },
+    )
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            return sorted({t.server for t in agg.catalog.tools}), dict(agg.catalog.failed)
+        finally:
+            await agg.stop()
+
+    servers, failed = asyncio.run(run())
+    assert servers == ["ok", "remote"]  # unaffected servers still aggregate
+    assert "TS_TEST_MISSING" in failed["broken"]  # and the cause is named
 
 
 # --- aggregation (mcp-aggregation spec) ----------------------------------------
@@ -167,6 +283,126 @@ def test_call_against_failed_server_names_it(tmp_path):
             await agg.stop()
 
     assert "sunny in X" in str(asyncio.run(run()))
+
+
+# --- http transport, against a real HTTP MCP server (issue #1) ------------------
+
+
+def test_aggregates_stdio_and_http_side_by_side(tmp_path, http_url):
+    """Both transports land in one catalog, indistinguishable downstream."""
+    cfg = write_config(tmp_path / "c.json", {"local": good("local"), "remote": {"url": http_url}})
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            return {(t.server, t.name) for t in agg.catalog.tools}, dict(agg.catalog.failed)
+        finally:
+            await agg.stop()
+
+    tools, failed = asyncio.run(run())
+    assert not failed
+    assert ("local", "get_weather") in tools
+    assert ("remote", "get_weather") in tools
+    assert ("remote", "echo_auth") in tools  # http-only tool proves the transport
+
+
+def test_proxied_call_over_http_returns_the_real_result(tmp_path, http_url):
+    cfg = write_config(tmp_path / "c.json", {"remote": {"url": http_url}})
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            return await agg.call("remote", "get_weather", {"city": "Boston"})
+        finally:
+            await agg.stop()
+
+    assert "sunny in Boston" in str(asyncio.run(run()))
+
+
+def test_auth_header_reaches_the_downstream_server(tmp_path, http_url, monkeypatch):
+    """The ${VAR} token must actually arrive on the wire, not merely parse."""
+    monkeypatch.setenv("TS_TEST_TOKEN", "s3cret")
+    cfg = write_config(
+        tmp_path / "c.json",
+        {"remote": {"url": http_url, "headers": {"Authorization": "Bearer ${TS_TEST_TOKEN}"}}},
+    )
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            return await agg.call("remote", "echo_auth", {})
+        finally:
+            await agg.stop()
+
+    assert "Bearer s3cret" in str(asyncio.run(run()))
+
+
+def test_unreachable_http_server_is_isolated(tmp_path):
+    """A dead remote costs its own tools, not the catalog — and retries first."""
+    dead = f"http://127.0.0.1:{free_port()}/mcp"  # nothing is listening there
+    cfg = write_config(tmp_path / "c.json", {"ok": good("ok"), "remote": {"url": dead}})
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            return sorted({t.server for t in agg.catalog.tools}), dict(agg.catalog.failed)
+        finally:
+            await agg.stop()
+
+    servers, failed = asyncio.run(run())
+    assert servers == ["ok"]
+    assert "remote" in failed
+
+
+def test_http_call_survives_a_dropped_session(tmp_path, http_url):
+    """A killed session must reconnect on the next call, not fail it.
+
+    Closing the underlying session mid-flight is what an idle timeout, a proxy,
+    or a redeploy does to a long-lived HTTP connection — routine, and invisible
+    until the next call.
+    """
+    cfg = write_config(tmp_path / "c.json", {"remote": {"url": http_url}})
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            first = await agg.call("remote", "get_weather", {"city": "Boston"})
+            await agg.catalog.clients["remote"]._disconnect()  # drop it under us
+            return first, await agg.call("remote", "get_weather", {"city": "Denver"})
+        finally:
+            await agg.stop()
+
+    first, after_drop = asyncio.run(run())
+    assert "sunny in Boston" in str(first)
+    assert "sunny in Denver" in str(after_drop)  # reconnected transparently
+
+
+def test_http_rejection_is_not_retried(tmp_path, http_url):
+    """The server answered and said no — reconnecting cannot change that answer.
+
+    Retrying here would run a side-effecting tool a second time for every call
+    made with bad arguments.
+    """
+    cfg = write_config(tmp_path / "c.json", {"remote": {"url": http_url}})
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            with pytest.raises(DownstreamError) as caught:
+                await agg.call("remote", "get_weather", {"wrong_arg": "x"})
+            return str(caught.value)
+        finally:
+            await agg.stop()
+
+    message = asyncio.run(run())
+    assert "remote" in message
+    assert "after reconnecting" not in message  # single attempt, not two
 
 
 # --- routing + savings (smart-tool-router spec) --------------------------------
@@ -303,3 +539,32 @@ def test_server_end_to_end(tmp_path):
     assert called["ok"] is True
     assert called["result"] == "sunny in Boston"  # structured payload survived
     assert report["find_tools_calls"] == 1
+
+
+def test_failed_server_is_visible_to_the_client(tmp_path):
+    """stderr logs are invisible to an MCP client — a dead backend must not be.
+
+    With remote servers this is the common case: expired token, moved endpoint,
+    network. The client has to be told why its tools disappeared.
+    """
+    import os
+
+    from fastmcp import Client
+    from fastmcp.client.transports import StdioTransport
+
+    root = Path(__file__).resolve().parents[1]
+    cfg = write_config(tmp_path / "c.json", {"ok": good("ok"), "dead": BROKEN})
+
+    async def run():
+        transport = StdioTransport(
+            command=sys.executable,
+            args=["-m", "toolsieve"],
+            cwd=str(root),
+            env={**os.environ, "TOOLSIEVE_CONFIG": str(cfg)},
+        )
+        async with Client(transport) as client:
+            return (await client.call_tool("get_savings_report", {})).data
+
+    report = asyncio.run(run())
+    assert "dead" in report["unavailable_servers"]
+    assert report["tools_aggregated"] == 2  # the healthy server is still usable

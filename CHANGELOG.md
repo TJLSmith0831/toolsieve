@@ -1,0 +1,28 @@
+# Changelog
+
+All notable changes to this project are documented here. Format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows
+[Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+## [0.2.0] - 2026-07-26
+
+### Added
+
+- HTTP/SSE MCP server support alongside stdio. Transport is inferred from the
+  config entry (`command` = stdio, `url` = remote), so entries stay
+  copy-pasteable from client configs. ([#2](https://github.com/TJLSmith0831/toolsieve/pull/2))
+- `${VAR}` expansion for auth in remote `url`/`headers` values, read from the
+  environment toolsieve runs in. An unset variable fails startup with an
+  error naming it rather than firing an unauthenticated request.
+- One retry in each direction for remote servers — once at aggregation for a
+  momentary connect blip, once at call time for a dead session — with no
+  retry for stdio, since a bad command is deterministic.
+
+## [0.1.0] - 2026-07-25
+
+### Added
+
+- Initial release: semantic tool routing across aggregated MCP servers via
+  `find_tools`, `call_tool`, and `get_savings_report`.

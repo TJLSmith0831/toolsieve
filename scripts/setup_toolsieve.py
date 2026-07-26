@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 from dataclasses import dataclass
@@ -67,9 +68,61 @@ def servers_in(target: ClientTarget) -> dict:
     return servers if isinstance(servers, dict) else {}
 
 
-def is_stdio(entry: object) -> bool:
-    """toolsieve v1 aggregates stdio servers only — HTTP/SSE entries stay put."""
-    return isinstance(entry, dict) and bool(entry.get("command")) and not entry.get("url")
+def classify(entry: object) -> tuple[str, str]:
+    """Sort a client's server entry into (kind, note). Kinds: stdio, http, skip.
+
+    Both transports move behind toolsieve now (issue #1). The interesting case is
+    an HTTP entry with no `headers`: that is either a genuinely open server or one
+    whose token the *client* holds via OAuth, and the config cannot tell them
+    apart. Migrating it is still right — it just may need a token added, so it is
+    flagged rather than moved silently or refused outright.
+    """
+    if not isinstance(entry, dict):
+        return "skip", "unrecognized entry"
+    if entry.get("command") and not entry.get("url"):
+        return "stdio", "stdio — moves"
+    if not entry.get("url"):
+        return "skip", "no 'command' and no 'url'"
+    if entry.get("headers"):
+        return "http", "http, has auth headers — moves"
+    return "http", "http, no auth headers — moves; may need a token"
+
+
+def literal_secrets(name: str, entry: dict) -> list[str]:
+    """Header/url values that carry a secret inline instead of via ${VAR}.
+
+    Copying these into toolsieve's config would fan a plaintext credential out to
+    a second file on disk. Worth naming, not worth blocking on.
+    """
+    suspect = []
+    for header, value in (entry.get("headers") or {}).items():
+        if isinstance(value, str) and value.strip() and "${" not in value:
+            suspect.append(f"{name}: header '{header}' holds a literal value")
+    url = entry.get("url")
+    if isinstance(url, str) and re.search(r"(?i)(key|token|secret)=(?!\$\{)[^&\s]+", url):
+        suspect.append(f"{name}: 'url' holds a literal key in its query string")
+    return suspect
+
+
+AUTH_HELP = """\
+Servers marked ! are HTTP with no auth headers in the client config.
+  - If the server is open (many doc servers are), nothing to do.
+  - If your client authenticated it via OAuth, that token lives in the client,
+    not in this file — toolsieve cannot reuse it. Issue the server a bearer
+    token or API key and reference it from an environment variable:
+
+      "myserver": {
+        "url": "https://example.com/mcp",
+        "headers": { "Authorization": "Bearer ${MYSERVER_TOKEN}" }
+      }
+
+    ${VAR} is read from the environment toolsieve runs in. If it is unset, that
+    one server fails with an error naming the variable — never a silent
+    unauthenticated call, and never at the expense of your other servers.
+    Keep the token in your shell profile or secret manager, not in this file.
+
+  After adding a token, verify with:
+      TOOLSIEVE_CONFIG=%s uv run python demo.py""" % TOOLSIEVE_CONFIG
 
 
 def toolsieve_entry() -> dict:
@@ -95,17 +148,22 @@ def cmd_list() -> int:
     if not found:
         print("No MCP client configs found in any known location.")
         return 1
+    needs_token = False
     for target, servers in found:
-        stdio = {k: v for k, v in servers.items() if is_stdio(v)}
-        other = {k: v for k, v in servers.items() if not is_stdio(v)}
         print(f"\n{target.label}  [--client {target.key}]")
         print(f"  {target.path}")
         if not servers:
             print("  no MCP servers configured")
-        for name in stdio:
-            print(f"  ✓ {name}  (stdio — will move behind toolsieve)")
-        for name in other:
-            print(f"  – {name}  (not stdio — left as-is, v1 is stdio-only)")
+        for name, entry in servers.items():
+            kind, note = classify(entry)
+            if kind == "skip":
+                print(f"  – {name}  ({note} — left as-is)")
+                continue
+            mark = "!" if "may need a token" in note else "✓"
+            needs_token = needs_token or mark == "!"
+            print(f"  {mark} {name}  ({note})")
+    if needs_token:
+        print(f"\n{AUTH_HELP}")
     return 0
 
 
@@ -116,24 +174,36 @@ def cmd_setup(client: str, apply: bool) -> int:
         return 1
     target, servers = match[0]
 
-    movable = {k: v for k, v in servers.items() if is_stdio(v)}
+    kinds = {k: classify(v) for k, v in servers.items()}
+    movable = {k: v for k, v in servers.items() if kinds[k][0] != "skip"}
     if not movable:
-        print(f"{target.label} has no stdio servers to move behind toolsieve.")
+        print(f"{target.label} has no servers to move behind toolsieve.")
         print("toolsieve will still be registered; add servers to its config later.")
 
     existing = read_json(TOOLSIEVE_CONFIG).get("mcpServers", {})
-    merged = {**existing, **movable}
+    # `type` is a client-side hint; toolsieve infers transport from command/url.
+    merged = {**existing, **{k: {kk: vv for kk, vv in v.items() if kk != "type"} for k, v in movable.items()}}
 
     print(f"\nClient:    {target.label}")
     print(f"           {target.path}")
     print(f"toolsieve: {TOOLSIEVE_CONFIG}")
     print(f"\nMoving {len(movable)} server(s) behind toolsieve:")
     for name in movable:
-        print(f"  {name}")
+        print(f"  {'!' if 'may need a token' in kinds[name][1] else '✓'} {name}  ({kinds[name][1]})")
     kept = [k for k in servers if k not in movable]
     if kept:
-        print(f"Leaving {len(kept)} non-stdio server(s) untouched: {', '.join(kept)}")
+        print(f"Leaving {len(kept)} unrecognized server(s) untouched: {', '.join(kept)}")
     print(f"\ntoolsieve config will hold {len(merged)} server(s).")
+
+    flagged = [n for n in movable if "may need a token" in kinds[n][1]]
+    if flagged:
+        print(f"\n{AUTH_HELP}")
+    exposed = [s for n, v in movable.items() for s in literal_secrets(n, v)]
+    if exposed:
+        print("\nHeads up — these carry a credential inline, which this copies to a second file:")
+        for line in exposed:
+            print(f"  {line}")
+        print("  Consider replacing the value with ${VAR} and exporting it instead.")
 
     if not apply:
         print("\nDry run — nothing written. Re-run with --apply to make these changes.")

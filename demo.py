@@ -44,7 +44,7 @@ async def main() -> int:
         return 1
 
     servers = json.loads(CONFIG.read_text()).get("mcpServers", {})
-    print(f"toolsieve demo — aggregating {len(servers)} server(s) from {CONFIG.name}")
+    print(f"toolsieve demo — {len(servers)} server(s) configured in {CONFIG.name}")
     if CONFIG.name == "toolsieve.config.demo.json":
         print("  (bundled demo catalog — set TOOLSIEVE_CONFIG to route across your own servers)")
 
@@ -59,8 +59,15 @@ async def main() -> int:
         report = (await client.call_tool("get_savings_report", {})).data
 
         rule("1. What the client actually sees")
-        print(f"  {report['tools_aggregated']} tools aggregated across {len(servers)} servers")
+        # Count what actually connected, not what the config asked for. Partial
+        # failure is a normal, survivable state — a remote server can be down or
+        # holding an expired token — so a green line here would be a lie.
+        unavailable = report.get("unavailable_servers") or {}
+        connected = len(servers) - len(unavailable)
+        print(f"  {report['tools_aggregated']} tools aggregated across {connected} servers")
         print(f"  {len(exposed)} tools exposed: {', '.join(exposed)}")
+        for name, reason in unavailable.items():
+            print(f"  ⚠ {name} unavailable, its tools are missing: {reason}")
 
         rule("2. Semantic routing")
         for query in QUERIES:
@@ -75,6 +82,15 @@ async def main() -> int:
 
         rule("3. Calling one for real")
         found = (await client.call_tool("find_tools", {"query": QUERIES[0]})).data
+        if not found["matches"]:
+            # An empty catalog is the normal shape of a misconfigured run — a bad
+            # config, an unset ${VAR}, every backend down. Say which, don't crash.
+            print(f"  nothing to call: {found.get('message', 'the catalog is empty')}")
+            if found.get("config_error"):
+                print(f"  config error: {found['config_error']}")
+            for name, reason in (found.get("unavailable_servers") or {}).items():
+                print(f"  server {name!r} unavailable: {reason}")
+            return 1
         top = found["matches"][0]
         # The schema comes back with the match — that is why call_tool takes args
         # instead of guessing them from the query (D10).

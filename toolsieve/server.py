@@ -77,15 +77,24 @@ async def find_tools(
 
 
 def _attach_config_error(result: dict[str, Any]) -> None:
-    """Report a missing/broken config through the tools, not a crash (D19)."""
+    """Surface config and backend problems through the tools, not a crash (D19).
+
+    A server that failed to connect is otherwise only visible in stderr logs,
+    which no MCP client shows you. That was survivable when every backend was a
+    local stdio process; a remote one can be down, moved, or holding an expired
+    token, so the client needs to be told why its tools vanished.
+    """
     aggregator: Aggregator | None = _state["aggregator"]
-    if aggregator is None or aggregator.config_error is None:
+    if aggregator is None:
         return
-    result["config_error"] = (
-        f"toolsieve has no usable config, so nothing is aggregated: "
-        f"{aggregator.config_error}. Create or fix that file — it is picked up "
-        "automatically, with no restart."
-    )
+    if aggregator.config_error is not None:
+        result["config_error"] = (
+            f"toolsieve has no usable config, so nothing is aggregated: "
+            f"{aggregator.config_error}. Create or fix that file — it is picked up "
+            "automatically, with no restart."
+        )
+    if aggregator.catalog.failed:
+        result["unavailable_servers"] = dict(aggregator.catalog.failed)
 
 
 @mcp.tool

@@ -1,0 +1,59 @@
+name: Update Changelog
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  changelog:
+    if: github.event.pull_request.merged == true && !startsWith(github.event.pull_request.title, 'docs: update changelog')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Skip if the PR already updated the changelog itself
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh pr view ${{ github.event.pull_request.number }} --json files \
+              --jq '.files[].path' | grep -qx CHANGELOG.md; then
+            echo "already_updated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Append changelog entry
+        if: steps.check.outputs.already_updated == 'false'
+        run: |
+          python3 scripts/update_changelog.py \
+            --pr "${{ github.event.pull_request.number }}" \
+            --title "${{ github.event.pull_request.title }}" \
+            --url "${{ github.event.pull_request.html_url }}"
+
+      - name: Open changelog PR
+        if: steps.check.outputs.already_updated == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet CHANGELOG.md; then
+            echo "No changelog changes"
+            exit 0
+          fi
+          branch="changelog/pr-${{ github.event.pull_request.number }}"
+          git checkout -b "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for #${{ github.event.pull_request.number }}"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "docs: update changelog for #${{ github.event.pull_request.number }}" \
+            --body "Auto-generated changelog entry for #${{ github.event.pull_request.number }}."

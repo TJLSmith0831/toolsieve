@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      # --group bench installs tiktoken + rank-bm25 so benchmarks/test_*.py can
+      # run here. Only the fast, model-free tests execute in CI; the full
+      # model-backed benchmark stays a manual step (D5).
+      - run: uv sync --group bench
+      - run: uv run pytest -q

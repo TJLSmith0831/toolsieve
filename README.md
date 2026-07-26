@@ -2,6 +2,8 @@
 
 # toolsieve
 
+![version](https://img.shields.io/badge/version-0.2.0-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+
 **Semantic tool routing for MCP.** Point it at the MCP servers you already run.
 It aggregates every tool they publish, then exposes exactly **three** tools to
 your client — and tells you how many tokens that saved.
@@ -10,7 +12,9 @@ your client — and tells you how many tokens that saved.
 
 *Claude Code (Sonnet) against 4 real MCP servers — 15 tools aggregated, 3 exposed.
 It routes "search my notes" and "read library docs" to the right tools, calls the
-weather tool for real, and reports **4,286 tokens saved (79.7%)** across the session.*
+weather tool for real, and reports **4,286 tokens saved (79.7%)** across the session.
+One recorded session, not the headline claim — see [Benchmarks](#benchmarks) for
+the measured numbers.*
 
 ## Why
 
@@ -26,6 +30,90 @@ weather" and it finds `get_weather` — no keyword overlap required.
 
 And it shows its work. Every response carries a token-savings receipt.
 
+## Benchmarks
+
+**181 tools from 25 real MCP servers** (GitHub, Slack, Notion, Linear, Stripe,
+Supabase, Playwright, Postgres and more), 159 queries with a known correct tool.
+
+> **Up to 25 tools, routing is free.** toolsieve finds exactly what loading the
+> whole catalog would — same 100% — on **12% of the tokens**. At 50 tools it
+> still finds the right tool **98%** as often, on **6% of the tokens**.
+
+### Savings climb fast. Accuracy barely moves.
+
+Both charts are on the same scale, so you can read one against the other:
+
+```
+  Tokens saved — climbs steeply with catalog size
+     10 tools   ██████████████████████████▋                66.7%
+     25 tools   ███████████████████████████████████        87.7%
+     50 tools   █████████████████████████████████████▌     94.0%
+    100 tools   ██████████████████████████████████████▊    96.9%
+    181 tools   ███████████████████████████████████████▎   98.3%
+
+  Right tool still found — barely moves
+     10 tools   ████████████████████████████████████████    100%
+     25 tools   ████████████████████████████████████████    100%
+     50 tools   ███████████████████████████████████████▎     98%
+    100 tools   ████████████████████████████████████▉        92%
+    181 tools   █████████████████████████████████▉           85%
+                ├─────────┬─────────┬─────────┬─────────┤
+                0%       25%       50%       75%     100%
+```
+
+That second chart is measured against loading every tool into context, which is
+the ceiling — it scores 100% by definition, because it never chooses. Getting to
+94% savings costs you two points of that. Getting to 98.3% costs fifteen.
+
+In absolute terms: at 50 tools a `find_tools` call carries **241 tokens instead
+of 4,010**. At 181, **244 instead of 14,418**.
+
+### Why not just keyword matching?
+
+Because it falls apart on the queries real users actually type:
+
+```
+  Right tool found, 50-tool catalog
+    toolsieve   ███████████████████████████████████████▎     98%
+    BM25        ██████████████████████████████▌              76%
+
+  …when the query shares no wording with the tool
+    toolsieve   █████████████████████████████████████▉       95%
+    BM25        ██████████████████▉                          47%
+                ├─────────┬─────────┬─────────┬─────────┤
+                0%       25%       50%       75%     100%
+```
+
+*"Remember for later that Alice works at Acme"* against **Create multiple new
+entities in the knowledge graph** — not one word in common. BM25 has nothing to
+match on. Semantic matching doubles its accuracy on queries like these, and does
+it for fewer tokens per call, not more.
+
+### What a correct answer costs
+
+Tokens alone don't settle it — a cheap call that routes to the wrong tool isn't a
+saving. Divide tokens per call by how often the method actually finds the tool,
+and you get the real unit price:
+
+```
+  Tokens spent per correctly routed query, 50-tool catalog
+    naive       ████████████████████████████████████████   4,010
+    BM25        ███▎                                         328
+    toolsieve   ██▍                                          246
+                ├───────────────────────────────────────┤
+                0                                   4,010
+```
+
+**toolsieve is the most accurate *and* the cheapest of the three** — 25% less per
+correct answer than BM25, 16× less than loading the catalog. It wins on both axes
+at once, which is the whole claim in one bar chart.
+
+*(Derived: tokens-per-call ÷ recall. The raw columns behind it are in the results
+table.)*
+
+Full per-size table, difficulty breakdown, methodology, and how to reproduce:
+**[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**.
+
 ## How it works
 
 ```
@@ -36,8 +124,8 @@ And it shows its work. Every response carries a token-savings receipt.
     │  toolsieve  │  embeds each tool's name + description once
     └─────────────┘  matches your query by cosine similarity
        │    │    │
-       ▼    ▼    ▼     real stdio MCP servers, connections held open
-     docs weather notes
+       ▼    ▼    ▼     real MCP servers — local stdio or remote HTTP/SSE,
+     docs notes linear   connections held open
 ```
 
 1. **`find_tools(query, k=3)`** — returns the closest matching tools, each with
@@ -68,15 +156,43 @@ already have:
 ```json
 {
   "mcpServers": {
-    "docs":    { "command": "node", "args": ["/path/to/docs-mcp/dist/index.js"] },
-    "weather": { "command": "node", "args": ["/path/to/weather-mcp/dist/index.js"] },
-    "notes":   { "command": "uv",   "args": ["run", "--directory", "/path/to/notes-mcp", "python", "src/index.py"] }
+    "docs":     { "command": "node", "args": ["/path/to/docs-mcp/dist/index.js"] },
+    "notes":    { "command": "uv",   "args": ["run", "--directory", "/path/to/notes-mcp", "python", "src/index.py"] },
+    "mintlify": { "url": "https://mcp.mintlify.com" },
+    "linear":   { "url": "https://mcp.linear.app/mcp",
+                  "headers": { "Authorization": "Bearer ${LINEAR_TOKEN}" } }
   }
 }
 ```
 
+Transport is inferred from the entry: `command` means a local stdio process,
+`url` means a remote HTTP/SSE server. A URL ending in `/sse` uses SSE, anything
+else uses Streamable HTTP. Both kinds land in one catalog — `find_tools` and
+`call_tool` don't distinguish.
+
 Edit this file while toolsieve is running and it re-aggregates automatically —
 no restart.
+
+#### Authenticating a remote server
+
+Put the credential in a header and reference it with `${VAR}`, expanded from the
+environment toolsieve runs in. It works in `headers` values and in the `url`, for
+servers that want their key in a query string:
+
+```json
+"ref": { "url": "https://api.ref.tools/mcp?apiKey=${REF_API_KEY}" }
+```
+
+If the variable is unset, that one server fails with an error naming it —
+toolsieve will not substitute an empty string and fire off an unauthenticated
+request, and your other servers are unaffected. **Keep tokens in your shell
+profile or secret manager, not in this file.**
+
+**OAuth is not supported.** If your client authenticated a server through an
+OAuth flow, that token lives in the client's own credential store and toolsieve
+can't reuse it — you need a bearer token or API key from that service instead.
+`scripts/setup_toolsieve.py` flags such entries with a `!` rather than silently
+migrating them into something that 401s on every call.
 
 ### Run
 
@@ -143,10 +259,20 @@ failed server returns an error naming that server. A missing or broken config
 starts toolsieve with an empty catalog rather than crashing — fix the file and it
 loads with no restart.
 
-**Savings scale with catalog size.** Routing k=3 out of 3 tools saves nothing;
-out of 15 it saves ~80%. Token counts are estimates (~4 chars/token), but
-`saved_pct` is exact — both sides are measured identically, so the estimator
-cancels out.
+**Remote servers get one retry, in both directions.** A remote endpoint that
+doesn't answer at startup is retried once before being dropped, so a momentary
+blip doesn't silently cost you a whole server until you next edit the config. And
+because idle timeouts, proxies, and redeploys quietly kill long-lived HTTP
+sessions, a call that fails on a dead session reconnects and retries once before
+erroring. Neither applies to stdio: a bad command is deterministic, so retrying
+it only adds latency to a failure you're getting anyway.
+
+**The receipt's token counts are estimates; its percentage is not.** Absolute
+counts use ~4 chars/token, but `saved_pct` is exact — both sides are measured
+identically, so the estimator cancels out. The [benchmark](#benchmarks) uses a
+real tokenizer instead, because an absolute number quoted in docs shouldn't come
+from an estimate. Routing k=3 out of 3 tools saves nothing, which is why the
+savings curve is reported across catalog sizes rather than as one number.
 
 ## Development
 
@@ -154,7 +280,24 @@ cancels out.
 uv run pytest -q
 ```
 
-Tests run against real stdio MCP servers, not mocks.
+Tests run against real MCP servers over both transports — stdio subprocesses and
+a real HTTP server on localhost — not mocks. No network egress required.
+
+The benchmark's scoring, baseline, and wiring tests run in that sweep too (with a
+fake embedder, so no model download). The full benchmark is a manual step, since
+it downloads a real embedding model and scores 3 methods × 5 catalog sizes × 159
+queries:
+
+```bash
+uv sync --group bench
+uv run --group bench python benchmarks/run_benchmark.py
+uv run python benchmarks/render_results.py
+```
+
+## Changelog
+
+Releases follow [Semantic Versioning](https://semver.org/). See
+[CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ## License
 
