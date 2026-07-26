@@ -86,6 +86,26 @@ Because it falls apart on the queries real users actually type:
 Stripe customer** — no shared words, nothing for BM25 to grip. Semantic matching
 more than doubles it, at the same token cost.
 
+### Token burn
+
+```
+  Tokens per find_tools call, 181-tool catalog
+    naive       ████████████████████████████████████████   14,418
+    BM25        ▋                                             240
+    toolsieve   ▋                                             244
+                ├───────────────────────────────────────┤
+                0                                  14,418
+```
+
+Both routers burn the same — they hand over three tools, so they cost what three
+tools cost. That is the point of the last two charts: **the token bill is set by
+routing at all, the accuracy is set by routing well.** Picking toolsieve over
+BM25 costs you four tokens a call and buys back nineteen points of recall —
+thirty-eight of them on paraphrased queries.
+
+Against no routing, it's **59× less**: over the full 159-query run, 2.29M tokens
+becomes 38.8K.
+
 Full per-size table, difficulty breakdown, methodology, and how to reproduce:
 **[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**.
 
