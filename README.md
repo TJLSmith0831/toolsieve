@@ -38,25 +38,20 @@ Supabase, Playwright, Postgres and more), 159 queries with a known correct tool.
 ### Does it pick the right tool?
 
 ```
-   100% ┤  ███████                              ███████
-        │  ███████               ▄▄▄▄▄▄▄        ███████
-    80% ┤  ███████               ███████        ███████
-        │  ███████    ▄▄▄▄▄▄▄    ███████        ███████               ███████
-    60% ┤  ███████    ███████    ███████        ███████               ███████
-        │  ███████    ███████    ███████        ███████               ███████
-    40% ┤  ███████    ███████    ███████        ███████               ███████
-        │  ███████    ███████    ███████        ███████    ███████    ███████
-    20% ┤  ███████    ███████    ███████        ███████    ███████    ███████
-        │  ███████    ███████    ███████        ███████    ███████    ███████
-     0% ┴────────────────────────────────────────────────────────────────────
-           naive      BM25     toolsieve        naive      BM25     toolsieve
-           100%        65%        85%           100%        32%        70%
+  all 159 queries
+    naive      ████████████████████████████████████████     100%
+    BM25       ██████████████████████████                    65%
+    toolsieve  ██████████████████████████████████            85%
 
-              all 159 queries                query shares no wording
-                                                with the tool (71)
+  no wording shared with the tool (71 queries)
+    naive      ████████████████████████████████████████     100%
+    BM25       ████████████▊                                 32%
+    toolsieve  ████████████████████████████                  70%
+               ├─────────┬─────────┬─────────┬─────────┤
+               0%       25%       50%       75%     100%
 ```
 
-The right-hand group is the one that matters. When a query shares no wording with
+The second group is the one that matters. When a query shares no wording with
 the tool's description — *"Bill this Stripe client for the work we did"* against
 **Create an invoice for a Stripe customer** — keyword matching has nothing to
 grip and drops to 32%. Semantic matching more than doubles it.
@@ -69,17 +64,11 @@ the model sort it out. Which is what the second chart is about.
 Tokens loaded into the model's context per `find_tools` call:
 
 ```
-  14,418 ┤  ███████
-         │  ███████
-         │  ███████
-         │  ███████
-         │  ███████
-         │  ███████
-         │  ███████
-    ~242 ┤  ███████    ▁▁▁▁▁▁▁    ▁▁▁▁▁▁▁
-       0 ┴───────────────────────────────
-             naive      BM25     toolsieve
-            14,418       240        244
+    naive      ████████████████████████████████████████   14,418
+    BM25       ▋                                             240
+    toolsieve  ▋                                             244
+               ├───────────────────┬───────────────────┤
+               0                 7,200            14,418
 ```
 
 **1.7% of the tokens** — 244 instead of 14,418, for 85% of the accuracy. That
