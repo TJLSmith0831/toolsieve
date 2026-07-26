@@ -2,6 +2,8 @@
 
 # toolsieve
 
+![version](https://img.shields.io/badge/version-0.2.0-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+
 **Semantic tool routing for MCP.** Point it at the MCP servers you already run.
 It aggregates every tool they publish, then exposes exactly **three** tools to
 your client — and tells you how many tokens that saved.
@@ -192,6 +194,11 @@ uv run pytest -q
 
 Tests run against real MCP servers over both transports — stdio subprocesses and
 a real HTTP server on localhost — not mocks. No network egress required.
+
+## Changelog
+
+Releases follow [Semantic Versioning](https://semver.org/). See
+[CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ## License
 
