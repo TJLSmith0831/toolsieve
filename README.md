@@ -36,8 +36,8 @@ And it shows its work. Every response carries a token-savings receipt.
     │  toolsieve  │  embeds each tool's name + description once
     └─────────────┘  matches your query by cosine similarity
        │    │    │
-       ▼    ▼    ▼     real stdio MCP servers, connections held open
-     docs weather notes
+       ▼    ▼    ▼     real MCP servers — local stdio or remote HTTP/SSE,
+     docs notes linear   connections held open
 ```
 
 1. **`find_tools(query, k=3)`** — returns the closest matching tools, each with
@@ -68,15 +68,42 @@ already have:
 ```json
 {
   "mcpServers": {
-    "docs":    { "command": "node", "args": ["/path/to/docs-mcp/dist/index.js"] },
-    "weather": { "command": "node", "args": ["/path/to/weather-mcp/dist/index.js"] },
-    "notes":   { "command": "uv",   "args": ["run", "--directory", "/path/to/notes-mcp", "python", "src/index.py"] }
+    "docs":     { "command": "node", "args": ["/path/to/docs-mcp/dist/index.js"] },
+    "notes":    { "command": "uv",   "args": ["run", "--directory", "/path/to/notes-mcp", "python", "src/index.py"] },
+    "mintlify": { "url": "https://mcp.mintlify.com" },
+    "linear":   { "url": "https://mcp.linear.app/mcp",
+                  "headers": { "Authorization": "Bearer ${LINEAR_TOKEN}" } }
   }
 }
 ```
 
+Transport is inferred from the entry: `command` means a local stdio process,
+`url` means a remote HTTP/SSE server. A URL ending in `/sse` uses SSE, anything
+else uses Streamable HTTP. Both kinds land in one catalog — `find_tools` and
+`call_tool` don't distinguish.
+
 Edit this file while toolsieve is running and it re-aggregates automatically —
 no restart.
+
+#### Authenticating a remote server
+
+Put the credential in a header and reference it with `${VAR}`, expanded from the
+environment toolsieve runs in. It works in `headers` values and in the `url`, for
+servers that want their key in a query string:
+
+```json
+"ref": { "url": "https://api.ref.tools/mcp?apiKey=${REF_API_KEY}" }
+```
+
+An unset variable is a startup error naming the variable — toolsieve will not
+substitute an empty string and fire off an unauthenticated request. **Keep tokens
+in your shell profile or secret manager, not in this file.**
+
+**OAuth is not supported.** If your client authenticated a server through an
+OAuth flow, that token lives in the client's own credential store and toolsieve
+can't reuse it — you need a bearer token or API key from that service instead.
+`scripts/setup_toolsieve.py` flags such entries with a `!` rather than silently
+migrating them into something that 401s on every call.
 
 ### Run
 
@@ -143,6 +170,14 @@ failed server returns an error naming that server. A missing or broken config
 starts toolsieve with an empty catalog rather than crashing — fix the file and it
 loads with no restart.
 
+**Remote servers get one retry, in both directions.** A remote endpoint that
+doesn't answer at startup is retried once before being dropped, so a momentary
+blip doesn't silently cost you a whole server until you next edit the config. And
+because idle timeouts, proxies, and redeploys quietly kill long-lived HTTP
+sessions, a call that fails on a dead session reconnects and retries once before
+erroring. Neither applies to stdio: a bad command is deterministic, so retrying
+it only adds latency to a failure you're getting anyway.
+
 **Savings scale with catalog size.** Routing k=3 out of 3 tools saves nothing;
 out of 15 it saves ~80%. Token counts are estimates (~4 chars/token), but
 `saved_pct` is exact — both sides are measured identically, so the estimator
@@ -154,7 +189,8 @@ cancels out.
 uv run pytest -q
 ```
 
-Tests run against real stdio MCP servers, not mocks.
+Tests run against real MCP servers over both transports — stdio subprocesses and
+a real HTTP server on localhost — not mocks. No network egress required.
 
 ## License
 

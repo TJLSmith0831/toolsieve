@@ -1,0 +1,13 @@
+{
+  "_comment": "Self-contained demo config: two real stdio MCP servers this repo ships, so `uv run python demo.py` works on a fresh clone with nothing else installed and no network access. Savings look small here because the catalog is tiny — point TOOLSIEVE_CONFIG at your own servers to see the real number. For an HTTP/SSE entry, see toolsieve.config.example.json.",
+  "mcpServers": {
+    "docs": {
+      "command": "uv",
+      "args": ["run", "python", "tests/fake_server.py", "docs"]
+    },
+    "weather": {
+      "command": "uv",
+      "args": ["run", "python", "tests/fake_server.py", "weather"]
+    }
+  }
+}

@@ -8,30 +8,65 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CONFIG_PATH = Path("toolsieve.config.json")
 
+# ${VAR} references inside `url` and `headers` values — the same convention
+# Claude Code's own .mcp.json uses, so an entry stays copy-pasteable.
+ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
 
 @dataclass(frozen=True)
 class ServerConfig:
+    """One downstream server: stdio if it has a `command`, HTTP/SSE if a `url`."""
+
     name: str
-    command: str
+    command: str | None = None
     args: list[str] = field(default_factory=list)
     env: dict[str, str] | None = None
     cwd: str | None = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
+
+    @property
+    def is_http(self) -> bool:
+        return self.url is not None
 
 
 class ConfigError(ValueError):
     """The config file is missing, unparseable, or structurally wrong."""
 
 
+def expand_env(value: str, *, server: str, where: str) -> str:
+    """Substitute ${VAR} from the environment.
+
+    An unset variable is a hard error naming both the server and the variable.
+    Substituting an empty string instead would send an unauthenticated request to
+    an authenticated endpoint, surfacing as a confusing 401 far from the cause.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        var = match.group(1)
+        resolved = os.environ.get(var)
+        if resolved is None:
+            raise ConfigError(
+                f"server '{server}': {where} references ${{{var}}}, which is not set. "
+                f"Export {var} in the environment toolsieve runs in, or drop the reference."
+            )
+        return resolved
+
+    return ENV_REF.sub(replace, value)
+
+
 def load_config(path: str | os.PathLike[str]) -> list[ServerConfig]:
     """Read a `mcpServers`-shaped config file into ServerConfigs.
 
-    v1 is stdio-only (D8): an entry without a `command` is rejected rather than
-    silently skipped, so a typo surfaces instead of quietly shrinking the catalog.
+    Transport is inferred from key presence (issue #1): `command` means stdio,
+    `url` means HTTP/SSE. An entry with neither is rejected rather than silently
+    skipped, so a typo surfaces instead of quietly shrinking the catalog.
     """
     path = Path(path)
     try:
@@ -54,11 +89,31 @@ def load_config(path: str | os.PathLike[str]) -> list[ServerConfig]:
     for name, entry in servers.items():
         if not isinstance(entry, dict):
             raise ConfigError(f"server '{name}': entry must be a JSON object")
-        command = entry.get("command")
-        if not command:
+        command, url = entry.get("command"), entry.get("url")
+        if command and url:
             raise ConfigError(
-                f"server '{name}': missing 'command' (v1 supports stdio servers only)"
+                f"server '{name}': has both 'command' and 'url' — pick one transport"
             )
+        if not command and not url:
+            raise ConfigError(f"server '{name}': needs a 'command' (stdio) or a 'url' (HTTP/SSE)")
+
+        if url:
+            headers = entry.get("headers") or {}
+            if not isinstance(headers, dict):
+                raise ConfigError(f"server '{name}': 'headers' must be a JSON object")
+            out.append(
+                ServerConfig(
+                    name=name,
+                    url=expand_env(str(url), server=name, where="'url'"),
+                    headers={
+                        str(k): expand_env(str(v), server=name, where=f"header '{k}'")
+                        for k, v in headers.items()
+                    }
+                    or None,
+                )
+            )
+            continue
+
         args = entry.get("args", [])
         if not isinstance(args, list):
             raise ConfigError(f"server '{name}': 'args' must be a list")

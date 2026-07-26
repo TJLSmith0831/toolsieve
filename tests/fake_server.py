@@ -1,4 +1,8 @@
-"""A tiny real stdio MCP server, used as a downstream backend in tests."""
+"""A tiny real MCP server, used as a downstream backend in tests.
+
+    python fake_server.py <name>              # stdio
+    python fake_server.py <name> --http 8123  # real HTTP on localhost
+"""
 
 import sys
 
@@ -20,4 +24,15 @@ def search_docs(query: str) -> str:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    if "--http" in sys.argv:
+        from fastmcp.server.dependencies import get_http_headers
+
+        @mcp.tool
+        def echo_auth() -> str:
+            """Return the Authorization header this request arrived with."""
+            # include= is required: fastmcp strips `authorization` by default.
+            return get_http_headers(include={"authorization"}).get("authorization", "<none>")
+
+        mcp.run(transport="http", host="127.0.0.1", port=int(sys.argv[sys.argv.index("--http") + 1]))
+    else:
+        mcp.run(transport="stdio")
