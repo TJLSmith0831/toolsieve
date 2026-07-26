@@ -18,7 +18,20 @@ jobs:
         with:
           ref: main
 
+      - name: Skip if the PR already updated the changelog itself
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh pr view ${{ github.event.pull_request.number }} --json files \
+              --jq '.files[].path' | grep -qx CHANGELOG.md; then
+            echo "already_updated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Append changelog entry
+        if: steps.check.outputs.already_updated == 'false'
         run: |
           python3 scripts/update_changelog.py \
             --pr "${{ github.event.pull_request.number }}" \
@@ -26,6 +39,7 @@ jobs:
             --url "${{ github.event.pull_request.html_url }}"
 
       - name: Open changelog PR
+        if: steps.check.outputs.already_updated == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
