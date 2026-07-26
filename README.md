@@ -32,26 +32,65 @@ And it shows its work. Every response carries a token-savings receipt.
 
 ## Benchmarks
 
-Measured against a catalog of **181 tools from 25 real MCP servers** (GitHub,
-Slack, Notion, Linear, Stripe, Supabase, Playwright, Postgres and more), with 159
-ground-truth queries:
+**181 tools from 25 real MCP servers** (GitHub, Slack, Notion, Linear, Stripe,
+Supabase, Playwright, Postgres and more), 159 queries with a known correct tool.
 
-| | naive (no routing) | BM25 (`rank-bm25`) | **toolsieve** |
-|---|---|---|---|
-| finds the right tool | 100% | 65% | **85%** |
-| …when the query shares no wording with the tool | 100% | 32% | **70%** |
-| tokens vs. loading the whole catalog | — | −98.3% | **−98.3%** |
+### Does it pick the right tool?
 
-Naive routing never misses because it never chooses — it ships all 181 tools and
-lets the model sort it out, at every token of the catalog. The honest framing is
-that toolsieve keeps most of that accuracy for 1.7% of the tokens, and beats
-lexical routing by more than double exactly where lexical routing is weakest:
-queries with no keyword overlap. Savings scale with catalog size — 67% at 10
-tools, 98.3% at 181.
+```
+   100% ┤  ███████                              ███████
+        │  ███████               ▄▄▄▄▄▄▄        ███████
+    80% ┤  ███████               ███████        ███████
+        │  ███████    ▄▄▄▄▄▄▄    ███████        ███████               ███████
+    60% ┤  ███████    ███████    ███████        ███████               ███████
+        │  ███████    ███████    ███████        ███████               ███████
+    40% ┤  ███████    ███████    ███████        ███████               ███████
+        │  ███████    ███████    ███████        ███████    ███████    ███████
+    20% ┤  ███████    ███████    ███████        ███████    ███████    ███████
+        │  ███████    ███████    ███████        ███████    ███████    ███████
+     0% ┴────────────────────────────────────────────────────────────────────
+           naive      BM25     toolsieve        naive      BM25     toolsieve
+           100%        65%        85%           100%        32%        70%
 
-Full methodology, the per-size curve, and how to reproduce it:
-**[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**. Token counts there come
-from a real tokenizer (`tiktoken`), not the runtime chars/4 estimate.
+              all 159 queries                query shares no wording
+                                                with the tool (71)
+```
+
+The right-hand group is the one that matters. When a query shares no wording with
+the tool's description — *"Bill this Stripe client for the work we did"* against
+**Create an invoice for a Stripe customer** — keyword matching has nothing to
+grip and drops to 32%. Semantic matching more than doubles it.
+
+Naive scores 100% because it never chooses: it ships the entire catalog and lets
+the model sort it out. Which is what the second chart is about.
+
+### What does it cost?
+
+Tokens loaded into the model's context per `find_tools` call:
+
+```
+  14,418 ┤  ███████
+         │  ███████
+         │  ███████
+         │  ███████
+         │  ███████
+         │  ███████
+         │  ███████
+    ~242 ┤  ███████    ▁▁▁▁▁▁▁    ▁▁▁▁▁▁▁
+       0 ┴───────────────────────────────
+             naive      BM25     toolsieve
+            14,418       240        244
+```
+
+**1.7% of the tokens** — 244 instead of 14,418, for 85% of the accuracy. That
+gap widens with the catalog: 67% saved at 10 tools, 94% at 50, 98.3% at 181.
+
+Both routers cost about the same; they differ only in *which* three tools they
+hand over, and the first chart is where that shows up. If your catalog is small
+enough that context isn't a constraint, no router beats no routing.
+
+Per-size curve, difficulty breakdown, methodology, and how to reproduce:
+**[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**.
 
 ## How it works
 
@@ -206,12 +245,12 @@ sessions, a call that fails on a dead session reconnects and retries once before
 erroring. Neither applies to stdio: a bad command is deterministic, so retrying
 it only adds latency to a failure you're getting anyway.
 
-**Savings scale with catalog size.** Routing k=3 out of 3 tools saves nothing;
-benchmarked, it is 67% at 10 tools, 94% at 50, and 98.3% at 181
-([full curve](benchmarks/RESULTS.md)). The runtime receipt's token counts are
-estimates (~4 chars/token), but `saved_pct` is exact — both sides are measured
-identically, so the estimator cancels out. The benchmark uses `tiktoken` instead,
-because an absolute number quoted in docs should come from a real tokenizer.
+**The receipt's token counts are estimates; its percentage is not.** Absolute
+counts use ~4 chars/token, but `saved_pct` is exact — both sides are measured
+identically, so the estimator cancels out. The [benchmark](#benchmarks) uses a
+real tokenizer instead, because an absolute number quoted in docs shouldn't come
+from an estimate. Routing k=3 out of 3 tools saves nothing, which is why the
+savings curve is reported across catalog sizes rather than as one number.
 
 ## Development
 
