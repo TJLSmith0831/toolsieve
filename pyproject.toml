@@ -16,3 +16,6 @@ package = false
 
 [dependency-groups]
 dev = ["pytest>=8.0"]
+# Benchmark-only (D4). Never a runtime dependency of the MCP server: real BM25
+# and a real tokenizer are what make the published numbers defensible.
+bench = ["tiktoken>=0.7", "rank-bm25>=0.2.2"]

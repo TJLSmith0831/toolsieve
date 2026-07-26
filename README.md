@@ -12,7 +12,9 @@ your client — and tells you how many tokens that saved.
 
 *Claude Code (Sonnet) against 4 real MCP servers — 15 tools aggregated, 3 exposed.
 It routes "search my notes" and "read library docs" to the right tools, calls the
-weather tool for real, and reports **4,286 tokens saved (79.7%)** across the session.*
+weather tool for real, and reports **4,286 tokens saved (79.7%)** across the session.
+One recorded session, not the headline claim — see [Benchmarks](#benchmarks) for
+the measured numbers.*
 
 ## Why
 
@@ -27,6 +29,29 @@ query, and returns the closest matches by cosine similarity. Ask for "what's the
 weather" and it finds `get_weather` — no keyword overlap required.
 
 And it shows its work. Every response carries a token-savings receipt.
+
+## Benchmarks
+
+Measured against a catalog of **181 tools from 25 real MCP servers** (GitHub,
+Slack, Notion, Linear, Stripe, Supabase, Playwright, Postgres and more), with 159
+ground-truth queries:
+
+| | naive (no routing) | BM25 (`rank-bm25`) | **toolsieve** |
+|---|---|---|---|
+| finds the right tool | 100% | 65% | **85%** |
+| …when the query shares no wording with the tool | 100% | 32% | **70%** |
+| tokens vs. loading the whole catalog | — | −98.3% | **−98.3%** |
+
+Naive routing never misses because it never chooses — it ships all 181 tools and
+lets the model sort it out, at every token of the catalog. The honest framing is
+that toolsieve keeps most of that accuracy for 1.7% of the tokens, and beats
+lexical routing by more than double exactly where lexical routing is weakest:
+queries with no keyword overlap. Savings scale with catalog size — 67% at 10
+tools, 98.3% at 181.
+
+Full methodology, the per-size curve, and how to reproduce it:
+**[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**. Token counts there come
+from a real tokenizer (`tiktoken`), not the runtime chars/4 estimate.
 
 ## How it works
 
@@ -182,9 +207,11 @@ erroring. Neither applies to stdio: a bad command is deterministic, so retrying
 it only adds latency to a failure you're getting anyway.
 
 **Savings scale with catalog size.** Routing k=3 out of 3 tools saves nothing;
-out of 15 it saves ~80%. Token counts are estimates (~4 chars/token), but
-`saved_pct` is exact — both sides are measured identically, so the estimator
-cancels out.
+benchmarked, it is 67% at 10 tools, 94% at 50, and 98.3% at 181
+([full curve](benchmarks/RESULTS.md)). The runtime receipt's token counts are
+estimates (~4 chars/token), but `saved_pct` is exact — both sides are measured
+identically, so the estimator cancels out. The benchmark uses `tiktoken` instead,
+because an absolute number quoted in docs should come from a real tokenizer.
 
 ## Development
 
@@ -194,6 +221,17 @@ uv run pytest -q
 
 Tests run against real MCP servers over both transports — stdio subprocesses and
 a real HTTP server on localhost — not mocks. No network egress required.
+
+The benchmark's scoring, baseline, and wiring tests run in that sweep too (with a
+fake embedder, so no model download). The full benchmark is a manual step, since
+it downloads a real embedding model and scores 3 methods × 5 catalog sizes × 159
+queries:
+
+```bash
+uv sync --group bench
+uv run --group bench python benchmarks/run_benchmark.py
+uv run python benchmarks/render_results.py
+```
 
 ## Changelog
 

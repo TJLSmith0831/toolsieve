@@ -1,0 +1,160 @@
+{"_note": "Ground-truth query set. 'difficulty' tiers per design.md: exact = echoes the tool's own description vocabulary (sanity floor); paraphrase = same intent with little or no shared vocabulary (the case semantic matching should win); ambiguous = plausibly matches 2+ catalog tools, so a dip here is informative rather than a routing bug. Each query has exactly one expected [server, tool], so mean recall_at_k over the set is the method's recall@k."}
+{"query": "Create a new issue in a GitHub repository", "expected": ["github", "create_issue"], "difficulty": "exact"}
+{"query": "Get the contents of an issue within a repository", "expected": ["github", "get_issue"], "difficulty": "exact"}
+{"query": "Create a new pull request in a GitHub repository", "expected": ["github", "create_pull_request"], "difficulty": "exact"}
+{"query": "Merge a pull request", "expected": ["github", "merge_pull_request"], "difficulty": "exact"}
+{"query": "Search for code across GitHub repositories", "expected": ["github", "search_code"], "difficulty": "exact"}
+{"query": "Push multiple files to a GitHub repository in a single commit", "expected": ["github", "push_files"], "difficulty": "exact"}
+{"query": "Read the complete contents of a file from the file system", "expected": ["filesystem", "read_file"], "difficulty": "exact"}
+{"query": "Recursively search for files and directories matching a pattern", "expected": ["filesystem", "search_files"], "difficulty": "exact"}
+{"query": "Get a recursive tree view of files and directories as a JSON structure", "expected": ["filesystem", "directory_tree"], "difficulty": "exact"}
+{"query": "Make line-based edits to a text file and return a git-style diff", "expected": ["filesystem", "edit_file"], "difficulty": "exact"}
+{"query": "Return the list of directories this server is allowed to access", "expected": ["filesystem", "list_allowed_directories"], "difficulty": "exact"}
+{"query": "Shows the working tree status", "expected": ["git", "git_status"], "difficulty": "exact"}
+{"query": "Records changes to the repository", "expected": ["git", "git_commit"], "difficulty": "exact"}
+{"query": "Shows the commit logs", "expected": ["git", "git_log"], "difficulty": "exact"}
+{"query": "Shows changes that are staged for commit", "expected": ["git", "git_diff_staged"], "difficulty": "exact"}
+{"query": "Post a new message to a Slack channel", "expected": ["slack", "slack_post_message"], "difficulty": "exact"}
+{"query": "Add a reaction emoji to a message", "expected": ["slack", "slack_add_reaction"], "difficulty": "exact"}
+{"query": "List public channels in the workspace with pagination", "expected": ["slack", "slack_list_channels"], "difficulty": "exact"}
+{"query": "Reply to a specific message thread in Slack", "expected": ["slack", "slack_reply_to_thread"], "difficulty": "exact"}
+{"query": "Search pages and databases by title across the workspace", "expected": ["notion", "search"], "difficulty": "exact"}
+{"query": "Query a Notion database with filters and sorts", "expected": ["notion", "post_database_query"], "difficulty": "exact"}
+{"query": "Retrieve the child blocks of a block or page", "expected": ["notion", "get_block_children"], "difficulty": "exact"}
+{"query": "Create a new issue in a Linear team", "expected": ["linear", "create_issue"], "difficulty": "exact"}
+{"query": "List cycles or sprints for a Linear team", "expected": ["linear", "list_cycles"], "difficulty": "exact"}
+{"query": "Create a customer in Stripe", "expected": ["stripe", "create_customer"], "difficulty": "exact"}
+{"query": "Refund a payment intent in Stripe", "expected": ["stripe", "create_refund"], "difficulty": "exact"}
+{"query": "Cancel an active Stripe subscription", "expected": ["stripe", "cancel_subscription"], "difficulty": "exact"}
+{"query": "Create a price for an existing Stripe product", "expected": ["stripe", "create_price"], "difficulty": "exact"}
+{"query": "Execute raw SQL in the Postgres database of a Supabase project", "expected": ["supabase", "execute_sql"], "difficulty": "exact"}
+{"query": "Apply a named DDL migration to a Supabase database", "expected": ["supabase", "apply_migration"], "difficulty": "exact"}
+{"query": "Get security and performance advisory notices for a Supabase project", "expected": ["supabase", "get_advisors"], "difficulty": "exact"}
+{"query": "Deploy an Edge Function to a Supabase project", "expected": ["supabase", "deploy_edge_function"], "difficulty": "exact"}
+{"query": "Retrieve a Sentry issue with its stack trace and most recent event", "expected": ["sentry", "get_issue_details"], "difficulty": "exact"}
+{"query": "List releases for a Sentry project", "expected": ["sentry", "find_releases"], "difficulty": "exact"}
+{"query": "Search Jira issues using JQL", "expected": ["jira", "jira_search"], "difficulty": "exact"}
+{"query": "Move a Jira issue to a different workflow status", "expected": ["jira", "jira_transition_issue"], "difficulty": "exact"}
+{"query": "Search Confluence content using CQL", "expected": ["confluence", "confluence_search"], "difficulty": "exact"}
+{"query": "Get the child pages of a Confluence page", "expected": ["confluence", "confluence_get_page_children"], "difficulty": "exact"}
+{"query": "Capture an accessibility snapshot of the current page", "expected": ["playwright", "browser_snapshot"], "difficulty": "exact"}
+{"query": "Press a key on the keyboard", "expected": ["playwright", "browser_press_key"], "difficulty": "exact"}
+{"query": "Fill out an input field by CSS selector", "expected": ["puppeteer", "puppeteer_fill"], "difficulty": "exact"}
+{"query": "Run a read-only SQL query against the connected PostgreSQL database", "expected": ["postgres", "query"], "difficulty": "exact"}
+{"query": "Execute a SELECT query on the SQLite database", "expected": ["sqlite", "read_query"], "difficulty": "exact"}
+{"query": "Add a business insight to the memo resource", "expected": ["sqlite", "append_insight"], "difficulty": "exact"}
+{"query": "Create multiple new relations between entities in the knowledge graph", "expected": ["memory", "create_relations"], "difficulty": "exact"}
+{"query": "Read the entire knowledge graph", "expected": ["memory", "read_graph"], "difficulty": "exact"}
+{"query": "Convert an address into geographic coordinates", "expected": ["google-maps", "maps_geocode"], "difficulty": "exact"}
+{"query": "Calculate travel distance and time for multiple origins and destinations", "expected": ["google-maps", "maps_distance_matrix"], "difficulty": "exact"}
+{"query": "Get elevation data for locations on the earth", "expected": ["google-maps", "maps_elevation"], "difficulty": "exact"}
+{"query": "Perform a general web search using the Brave Search API", "expected": ["brave-search", "brave_web_search"], "difficulty": "exact"}
+{"query": "Fetch a URL from the internet and extract its contents as markdown", "expected": ["fetch", "fetch"], "difficulty": "exact"}
+{"query": "Get the current time in a specific IANA timezone", "expected": ["time", "get_current_time"], "difficulty": "exact"}
+{"query": "Convert a time between two timezones", "expected": ["time", "convert_time"], "difficulty": "exact"}
+{"query": "Set a Redis key-value pair with an optional expiration", "expected": ["redis", "set"], "difficulty": "exact"}
+{"query": "Generate an image from a text prompt and return its URL", "expected": ["everart", "generate_image"], "difficulty": "exact"}
+{"query": "Read the contents of a file from Google Drive by file ID", "expected": ["gdrive", "gdrive_read_file"], "difficulty": "exact"}
+{"query": "I found a bug in our code, file a ticket for it on GitHub", "expected": ["github", "create_issue"], "difficulty": "paraphrase"}
+{"query": "My branch is ready — put it up for the team to look over on GitHub", "expected": ["github", "create_pull_request"], "difficulty": "paraphrase"}
+{"query": "Which files did that code review touch on GitHub?", "expected": ["github", "get_pull_request_files"], "difficulty": "paraphrase"}
+{"query": "Who has been contributing to this GitHub project lately?", "expected": ["github", "list_commits"], "difficulty": "paraphrase"}
+{"query": "Sign off on my teammate's proposed changes over on GitHub", "expected": ["github", "create_pull_request_review"], "difficulty": "paraphrase"}
+{"query": "Dump out everything written in that document on disk", "expected": ["filesystem", "read_file"], "difficulty": "paraphrase"}
+{"query": "Where did I put my notes? Look through my folders for anything called budget", "expected": ["filesystem", "search_files"], "difficulty": "paraphrase"}
+{"query": "Give that document on disk a different name", "expected": ["filesystem", "move_file"], "difficulty": "paraphrase"}
+{"query": "How large is that document on disk and when was it last touched?", "expected": ["filesystem", "get_file_info"], "difficulty": "paraphrase"}
+{"query": "Set up a fresh empty folder for my project", "expected": ["filesystem", "create_directory"], "difficulty": "paraphrase"}
+{"query": "Open several documents on disk at once so I can compare them", "expected": ["filesystem", "read_multiple_files"], "difficulty": "paraphrase"}
+{"query": "What have I altered locally but not yet handed to version control?", "expected": ["git", "git_diff_unstaged"], "difficulty": "paraphrase"}
+{"query": "Start a fresh line of work off the main line in my local repo", "expected": ["git", "git_create_branch"], "difficulty": "paraphrase"}
+{"query": "Take my locally queued-up changes back out of the queue", "expected": ["git", "git_reset"], "difficulty": "paraphrase"}
+{"query": "Move me over to the other line of work in my local repo", "expected": ["git", "git_checkout"], "difficulty": "paraphrase"}
+{"query": "Set up version tracking from scratch in this folder", "expected": ["git", "git_init"], "difficulty": "paraphrase"}
+{"query": "Let the team in #general know the deploy finished", "expected": ["slack", "slack_post_message"], "difficulty": "paraphrase"}
+{"query": "Give that Slack message a thumbs up", "expected": ["slack", "slack_add_reaction"], "difficulty": "paraphrase"}
+{"query": "Who is in this Slack workspace?", "expected": ["slack", "slack_get_users"], "difficulty": "paraphrase"}
+{"query": "Catch me up on what people said in that Slack channel earlier", "expected": ["slack", "slack_get_channel_history"], "difficulty": "paraphrase"}
+{"query": "Tell me about this Slack person — their title and picture", "expected": ["slack", "slack_get_user_profile"], "difficulty": "paraphrase"}
+{"query": "Start a fresh doc under our team's Notion space", "expected": ["notion", "post_page"], "difficulty": "paraphrase"}
+{"query": "Pull the rows out of my Notion tracker where the status is done", "expected": ["notion", "post_database_query"], "difficulty": "paraphrase"}
+{"query": "Leave a note for the team on this Notion doc", "expected": ["notion", "create_a_comment"], "difficulty": "paraphrase"}
+{"query": "Throw that Notion block in the trash", "expected": ["notion", "delete_a_block"], "difficulty": "paraphrase"}
+{"query": "What is on my plate this sprint over in Linear?", "expected": ["linear", "list_issues"], "difficulty": "paraphrase"}
+{"query": "Mark that Linear ticket finished", "expected": ["linear", "update_issue"], "difficulty": "paraphrase"}
+{"query": "How is the Linear initiative tracking against its milestones?", "expected": ["linear", "get_project"], "difficulty": "paraphrase"}
+{"query": "Bill this Stripe client for the work we did", "expected": ["stripe", "create_invoice"], "difficulty": "paraphrase"}
+{"query": "Give the Stripe shopper their money back", "expected": ["stripe", "create_refund"], "difficulty": "paraphrase"}
+{"query": "How much money is sitting in our Stripe account?", "expected": ["stripe", "retrieve_balance"], "difficulty": "paraphrase"}
+{"query": "Set up a Stripe page people can pay us through", "expected": ["stripe", "create_payment_link"], "difficulty": "paraphrase"}
+{"query": "Stop charging that Stripe shopper every month", "expected": ["stripe", "cancel_subscription"], "difficulty": "paraphrase"}
+{"query": "Who is paying us monthly on Stripe right now?", "expected": ["stripe", "list_subscriptions"], "difficulty": "paraphrase"}
+{"query": "Lock in that draft Stripe bill so the customer can settle it", "expected": ["stripe", "finalize_invoice"], "difficulty": "paraphrase"}
+{"query": "Anything flagged as risky or slow on my Supabase setup?", "expected": ["supabase", "get_advisors"], "difficulty": "paraphrase"}
+{"query": "Something broke on my Supabase backend — show me what it printed", "expected": ["supabase", "get_logs"], "difficulty": "paraphrase"}
+{"query": "Give me TypeScript definitions matching my Supabase schema", "expected": ["supabase", "generate_typescript_types"], "difficulty": "paraphrase"}
+{"query": "Spin up a throwaway copy of my Supabase environment to try something", "expected": ["supabase", "create_branch"], "difficulty": "paraphrase"}
+{"query": "What is blowing up in production for our Sentry org right now?", "expected": ["sentry", "find_issues"], "difficulty": "paraphrase"}
+{"query": "Mark that Sentry crash as taken care of", "expected": ["sentry", "update_issue"], "difficulty": "paraphrase"}
+{"query": "Where can I move this Jira ticket to next?", "expected": ["jira", "jira_get_transitions"], "difficulty": "paraphrase"}
+{"query": "Everything currently open under that Jira project, please", "expected": ["jira", "jira_get_project_issues"], "difficulty": "paraphrase"}
+{"query": "Write up something new in our Confluence team space", "expected": ["confluence", "confluence_create_page"], "difficulty": "paraphrase"}
+{"query": "Show me what the browser page looks like right now as an image", "expected": ["playwright", "browser_take_screenshot"], "difficulty": "paraphrase"}
+{"query": "Hold on until the loading spinner disappears from the browser page", "expected": ["playwright", "browser_wait_for"], "difficulty": "paraphrase"}
+{"query": "Did the browser page log any errors?", "expected": ["playwright", "browser_console_messages"], "difficulty": "paraphrase"}
+{"query": "What did the browser page ask the backend for while it loaded?", "expected": ["playwright", "browser_network_requests"], "difficulty": "paraphrase"}
+{"query": "Attach my resume to that form in the browser", "expected": ["playwright", "browser_file_upload"], "difficulty": "paraphrase"}
+{"query": "Send the browser back where it just came from", "expected": ["playwright", "browser_navigate_back"], "difficulty": "paraphrase"}
+{"query": "Pick the second choice in that browser dropdown", "expected": ["playwright", "browser_select_option"], "difficulty": "paraphrase"}
+{"query": "Remember for later that Alice works at Acme", "expected": ["memory", "create_entities"], "difficulty": "paraphrase"}
+{"query": "What do I already know about Bob?", "expected": ["memory", "search_nodes"], "difficulty": "paraphrase"}
+{"query": "Wipe that person out of what I remember entirely", "expected": ["memory", "delete_entities"], "difficulty": "paraphrase"}
+{"query": "Tack another fact onto someone I already remember", "expected": ["memory", "add_observations"], "difficulty": "paraphrase"}
+{"query": "Look up what the news is saying about the election", "expected": ["brave-search", "brave_web_search"], "difficulty": "paraphrase"}
+{"query": "How do I drive there from the office?", "expected": ["google-maps", "maps_directions"], "difficulty": "paraphrase"}
+{"query": "What are that restaurant's opening hours and what do reviewers say?", "expected": ["google-maps", "maps_place_details"], "difficulty": "paraphrase"}
+{"query": "What street is at 40.7128, -74.0060?", "expected": ["google-maps", "maps_reverse_geocode"], "difficulty": "paraphrase"}
+{"query": "Find me somewhere nearby that sells coffee, with a map listing", "expected": ["google-maps", "maps_search_places"], "difficulty": "paraphrase"}
+{"query": "Grab the readable text off that web page for me", "expected": ["fetch", "fetch"], "difficulty": "paraphrase"}
+{"query": "What time is it over in Tokyo right now?", "expected": ["time", "get_current_time"], "difficulty": "paraphrase"}
+{"query": "If it is 3pm here, what does that make it in London?", "expected": ["time", "convert_time"], "difficulty": "paraphrase"}
+{"query": "Stash this value under a name in Redis so I can pull it back later", "expected": ["redis", "set"], "difficulty": "paraphrase"}
+{"query": "Make me a picture of a cat in a spacesuit", "expected": ["everart", "generate_image"], "difficulty": "paraphrase"}
+{"query": "Work through this problem one step at a time, revising as you go", "expected": ["sequential-thinking", "sequentialthinking"], "difficulty": "paraphrase"}
+{"query": "Find that spreadsheet I keep in my Google cloud storage", "expected": ["gdrive", "gdrive_search"], "difficulty": "paraphrase"}
+{"query": "What columns does the users table have in my SQLite file?", "expected": ["sqlite", "describe_table"], "difficulty": "paraphrase"}
+{"query": "Put a new row into my SQLite file", "expected": ["sqlite", "write_query"], "difficulty": "paraphrase"}
+{"query": "Open a change request against that GitLab project", "expected": ["gitlab", "create_merge_request"], "difficulty": "paraphrase"}
+{"query": "Make my own copy of that GitLab project under my namespace", "expected": ["gitlab", "fork_repository"], "difficulty": "paraphrase"}
+{"query": "create an issue", "expected": ["github", "create_issue"], "difficulty": "ambiguous"}
+{"query": "search for files", "expected": ["filesystem", "search_files"], "difficulty": "ambiguous"}
+{"query": "list all tables", "expected": ["sqlite", "list_tables"], "difficulty": "ambiguous"}
+{"query": "get the file contents", "expected": ["filesystem", "read_file"], "difficulty": "ambiguous"}
+{"query": "add a comment", "expected": ["github", "add_issue_comment"], "difficulty": "ambiguous"}
+{"query": "run a SQL query", "expected": ["postgres", "query"], "difficulty": "ambiguous"}
+{"query": "take a screenshot", "expected": ["playwright", "browser_take_screenshot"], "difficulty": "ambiguous"}
+{"query": "click the button", "expected": ["playwright", "browser_click"], "difficulty": "ambiguous"}
+{"query": "navigate to the page", "expected": ["playwright", "browser_navigate"], "difficulty": "ambiguous"}
+{"query": "list projects", "expected": ["supabase", "list_projects"], "difficulty": "ambiguous"}
+{"query": "update the issue", "expected": ["github", "update_issue"], "difficulty": "ambiguous"}
+{"query": "create a branch", "expected": ["github", "create_branch"], "difficulty": "ambiguous"}
+{"query": "search", "expected": ["notion", "search"], "difficulty": "ambiguous"}
+{"query": "list users", "expected": ["slack", "slack_get_users"], "difficulty": "ambiguous"}
+{"query": "create a new page", "expected": ["notion", "post_page"], "difficulty": "ambiguous"}
+{"query": "get project details", "expected": ["supabase", "get_project"], "difficulty": "ambiguous"}
+{"query": "post a message", "expected": ["slack", "slack_post_message"], "difficulty": "ambiguous"}
+{"query": "search issues", "expected": ["jira", "jira_search"], "difficulty": "ambiguous"}
+{"query": "write to a file", "expected": ["filesystem", "write_file"], "difficulty": "ambiguous"}
+{"query": "list channels", "expected": ["slack", "slack_list_channels"], "difficulty": "ambiguous"}
+{"query": "hover over the element", "expected": ["playwright", "browser_hover"], "difficulty": "ambiguous"}
+{"query": "type some text into the field", "expected": ["playwright", "browser_type"], "difficulty": "ambiguous"}
+{"query": "push several files at once", "expected": ["github", "push_files"], "difficulty": "ambiguous"}
+{"query": "get the logs", "expected": ["supabase", "get_logs"], "difficulty": "ambiguous"}
+{"query": "search the docs in our wiki", "expected": ["confluence", "confluence_search"], "difficulty": "ambiguous"}
+{"query": "store this for later", "expected": ["redis", "set"], "difficulty": "ambiguous"}
+{"query": "evaluate javascript on the page", "expected": ["puppeteer", "puppeteer_evaluate"], "difficulty": "ambiguous"}
+{"query": "describe the schema", "expected": ["sqlite", "describe_table"], "difficulty": "ambiguous"}
+{"query": "geocode this location", "expected": ["google-maps", "maps_geocode"], "difficulty": "ambiguous"}
+{"query": "close the ticket", "expected": ["jira", "jira_transition_issue"], "difficulty": "ambiguous"}
+{"query": "who is on the team", "expected": ["linear", "list_teams"], "difficulty": "ambiguous"}
+{"query": "delete it from the graph", "expected": ["memory", "delete_entities"], "difficulty": "ambiguous"}
