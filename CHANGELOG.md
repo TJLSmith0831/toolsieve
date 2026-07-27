@@ -6,6 +6,27 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-27
+
+### Added
+
+- Load credentials from a `.env` file next to the config, hot-reloaded like
+  the config itself — no more shell-export-and-restart. A real exported
+  variable always wins over `.env`, which only fills gaps.
+  ([#6](https://github.com/TJLSmith0831/toolsieve/issues/6))
+- Codex CLI (TOML) support in `scripts/setup_toolsieve.py`'s client-config
+  migration, alongside Claude Code, Claude Desktop, Cursor, Windsurf, and
+  VS Code. Reads via stdlib `tomllib`, writes via `tomlkit` so a hand-edited
+  `~/.codex/config.toml` keeps its comments and formatting.
+  ([#9](https://github.com/TJLSmith0831/toolsieve/issues/9))
+
+### Documentation
+
+- Document `scripts/setup_toolsieve.py`'s migration flow in the README.
+  ([#8](https://github.com/TJLSmith0831/toolsieve/issues/8))
+- Add `CONTRIBUTING.md`. ([#10](https://github.com/TJLSmith0831/toolsieve/issues/10))
+- Add a CI status badge to the README. ([#11](https://github.com/TJLSmith0831/toolsieve/issues/11))
+
 ## [0.2.0] - 2026-07-26
 
 ### Added
