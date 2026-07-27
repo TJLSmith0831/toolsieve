@@ -2,7 +2,7 @@
 
 # toolsieve
 
-![version](https://img.shields.io/badge/version-0.2.0-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+![CI](https://github.com/TJLSmith0831/toolsieve/actions/workflows/ci.yml/badge.svg) ![version](https://img.shields.io/badge/version-0.2.1-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 **Semantic tool routing for MCP.** Point it at the MCP servers you already run.
 It aggregates every tool they publish, then exposes exactly **three** tools to
@@ -148,6 +148,28 @@ uv sync
 ```
 
 ### Configure
+
+#### Migrate an existing client config
+
+Already have `mcpServers` configured in Claude Code, Claude Desktop, Cursor,
+Windsurf, VS Code, or Codex CLI? `scripts/setup_toolsieve.py` moves those
+entries behind toolsieve for you instead of hand-copying config:
+
+```bash
+uv run python scripts/setup_toolsieve.py --list                       # discover configs across every known client
+uv run python scripts/setup_toolsieve.py --client claude-code --dry-run  # preview the migration
+uv run python scripts/setup_toolsieve.py --client claude-code --apply    # write it
+```
+
+Nothing is written without `--apply`. Every file the script edits is backed
+up first (`*.toolsieve-bak` for the client config, `*.json.bak` for an
+existing toolsieve config), and servers it doesn't recognize are left
+untouched. HTTP servers with no auth headers are flagged with `!` rather than
+silently migrated, since that's either an open server or one whose token
+lives in the client via OAuth — a case toolsieve can't resolve for you (see
+[Authenticating a remote server](#authenticating-a-remote-server)).
+
+Or configure it by hand:
 
 Create `toolsieve.config.json`. It's the same `mcpServers` shape Claude Desktop
 and Claude Code use, so entries are usually copy-pasteable from a config you
