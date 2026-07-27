@@ -152,8 +152,8 @@ uv sync
 #### Migrate an existing client config
 
 Already have `mcpServers` configured in Claude Code, Claude Desktop, Cursor,
-Windsurf, or VS Code? `scripts/setup_toolsieve.py` moves those entries behind
-toolsieve for you instead of hand-copying JSON:
+Windsurf, VS Code, or Codex CLI? `scripts/setup_toolsieve.py` moves those
+entries behind toolsieve for you instead of hand-copying config:
 
 ```bash
 uv run python scripts/setup_toolsieve.py --list                       # discover configs across every known client

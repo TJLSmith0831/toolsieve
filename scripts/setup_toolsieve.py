@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +35,10 @@ class ClientTarget:
     path: Path
     # Where mcpServers live inside the file: () = top level, ("projects", "<cwd>") = nested
     section: tuple[str, ...] = ()
+    # Key holding the servers table under `section`. None means `section` itself
+    # is the servers table (Codex's `[mcp_servers.<name>]` has no wrapper key).
+    servers_key: str | None = "mcpServers"
+    fmt: str = "json"  # "json" or "toml"
 
 
 def targets() -> list[ClientTarget]:
@@ -49,22 +54,30 @@ def targets() -> list[ClientTarget]:
         ClientTarget("cursor", "Cursor", HOME / ".cursor/mcp.json"),
         ClientTarget("windsurf", "Windsurf", HOME / ".codeium/windsurf/mcp_config.json"),
         ClientTarget("vscode", "VS Code", HOME / ".vscode/mcp.json"),
+        ClientTarget(
+            "codex", "Codex CLI", HOME / ".codex/config.toml",
+            section=("mcp_servers",), servers_key=None, fmt="toml",
+        ),
     ]
 
 
-def read_json(path: Path) -> dict:
+def read_config(path: Path, fmt: str) -> dict:
     try:
-        data = json.loads(path.read_text())
-    except (FileNotFoundError, json.JSONDecodeError):
+        text = path.read_text()
+    except FileNotFoundError:
+        return {}
+    try:
+        data = tomllib.loads(text) if fmt == "toml" else json.loads(text)
+    except (json.JSONDecodeError, tomllib.TOMLDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
 
 
 def servers_in(target: ClientTarget) -> dict:
-    node = read_json(target.path)
+    node = read_config(target.path, target.fmt)
     for key in target.section:
         node = node.get(key, {}) if isinstance(node, dict) else {}
-    servers = node.get("mcpServers") if isinstance(node, dict) else None
+    servers = node if target.servers_key is None else node.get(target.servers_key)
     return servers if isinstance(servers, dict) else {}
 
 
@@ -167,6 +180,41 @@ def cmd_list() -> int:
     return 0
 
 
+def write_client_config(target: ClientTarget, movable: dict) -> None:
+    """Remove `movable` servers from the client config and register toolsieve.
+
+    TOML (Codex) goes through tomlkit so a hand-edited config keeps its
+    comments and formatting — tomllib, used for reading, is read-only.
+    """
+    if target.fmt == "toml":
+        import tomlkit
+
+        doc = tomlkit.parse(target.path.read_text()) if target.path.exists() else tomlkit.document()
+        node = doc
+        for key in target.section:
+            if key not in node:
+                node[key] = tomlkit.table()
+            node = node[key]
+        for name in movable:
+            node.pop(name, None)
+        entry = tomlkit.table()
+        for k, v in toolsieve_entry().items():
+            entry[k] = v
+        node["toolsieve"] = entry
+        target.path.write_text(tomlkit.dumps(doc))
+        return
+
+    config = read_config(target.path, "json")
+    node = config
+    for key in target.section:
+        node = node.setdefault(key, {})
+    client_servers = node.setdefault(target.servers_key, {})
+    for name in movable:
+        client_servers.pop(name, None)
+    client_servers["toolsieve"] = toolsieve_entry()
+    target.path.write_text(json.dumps(config, indent=2) + "\n")
+
+
 def cmd_setup(client: str, apply: bool) -> int:
     match = [(t, s) for t, s in discover() if t.key == client]
     if not match:
@@ -180,7 +228,7 @@ def cmd_setup(client: str, apply: bool) -> int:
         print(f"{target.label} has no servers to move behind toolsieve.")
         print("toolsieve will still be registered; add servers to its config later.")
 
-    existing = read_json(TOOLSIEVE_CONFIG).get("mcpServers", {})
+    existing = read_config(TOOLSIEVE_CONFIG, "json").get("mcpServers", {})
     # `type` is a client-side hint; toolsieve infers transport from command/url.
     merged = {**existing, **{k: {kk: vv for kk, vv in v.items() if kk != "type"} for k, v in movable.items()}}
 
@@ -217,15 +265,7 @@ def cmd_setup(client: str, apply: bool) -> int:
     backup = target.path.with_suffix(target.path.suffix + ".toolsieve-bak")
     shutil.copy2(target.path, backup)
 
-    config = read_json(target.path)
-    node = config
-    for key in target.section:
-        node = node.setdefault(key, {})
-    client_servers = node.setdefault("mcpServers", {})
-    for name in movable:
-        client_servers.pop(name, None)
-    client_servers["toolsieve"] = toolsieve_entry()
-    target.path.write_text(json.dumps(config, indent=2) + "\n")
+    write_client_config(target, movable)
 
     print(f"\nDone. Backup of the client config: {backup}")
     print(f"Restart {target.label} to pick up the change.")
