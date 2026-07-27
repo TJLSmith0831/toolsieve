@@ -2,7 +2,7 @@
 
 # toolsieve
 
-![version](https://img.shields.io/badge/version-0.2.0-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+![CI](https://github.com/TJLSmith0831/toolsieve/actions/workflows/ci.yml/badge.svg) ![version](https://img.shields.io/badge/version-0.2.0-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 **Semantic tool routing for MCP.** Point it at the MCP servers you already run.
 It aggregates every tool they publish, then exposes exactly **three** tools to
