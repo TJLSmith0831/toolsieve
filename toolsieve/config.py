@@ -40,9 +40,13 @@ class ConfigError(ValueError):
     """The config file is missing, unparseable, or structurally wrong."""
 
 
-def expand_env(value: str, *, server: str, where: str) -> str:
-    """Substitute ${VAR} from the environment.
+def expand_env(
+    value: str, *, server: str, where: str, overrides: dict[str, str] | None = None
+) -> str:
+    """Substitute ${VAR} from the environment, falling back to `overrides` (a `.env`).
 
+    A real exported variable always wins over `.env` — `.env` only fills gaps
+    (GH #6), so nothing that already works via `export` changes behavior.
     An unset variable is a hard error naming both the server and the variable.
     Substituting an empty string instead would send an unauthenticated request to
     an authenticated endpoint, surfacing as a confusing 401 far from the cause.
@@ -51,14 +55,44 @@ def expand_env(value: str, *, server: str, where: str) -> str:
     def replace(match: re.Match[str]) -> str:
         var = match.group(1)
         resolved = os.environ.get(var)
+        if resolved is None and overrides:
+            resolved = overrides.get(var)
         if resolved is None:
             raise ConfigError(
                 f"server '{server}': {where} references ${{{var}}}, which is not set. "
-                f"Export {var} in the environment toolsieve runs in, or drop the reference."
+                f"Set {var} in a .env file next to the config, or export it in the "
+                f"environment toolsieve runs in."
             )
         return resolved
 
     return ENV_REF.sub(replace, value)
+
+
+def load_dotenv_file(path: str | os.PathLike[str]) -> dict[str, str]:
+    """Parse a minimal `KEY=VALUE` `.env` file (GH #6).
+
+    Missing file is not an error — same D19 spirit as a missing config; toolsieve
+    just has nothing to add. ponytail: no quoting/multiline/escape support beyond
+    stripping one pair of matching quotes — reach for `python-dotenv` if that ever
+    turns out to matter.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return {}
+
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key, val = key.strip(), val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+            val = val[1:-1]
+        out[key] = val
+    return out
 
 
 def load_config(path: str | os.PathLike[str]) -> list[ServerConfig]:

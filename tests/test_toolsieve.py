@@ -20,7 +20,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from toolsieve.aggregator import Aggregator, DownstreamError  # noqa: E402
-from toolsieve.config import ConfigError, ServerConfig, load_config  # noqa: E402
+from toolsieve.config import (  # noqa: E402
+    ConfigError,
+    ServerConfig,
+    expand_env,
+    load_config,
+    load_dotenv_file,
+)
 from toolsieve.router import Router, Savings, saved_pct  # noqa: E402
 
 FAKE = str(Path(__file__).resolve().parent / "fake_server.py")
@@ -163,6 +169,104 @@ def test_unset_env_ref_costs_one_server_not_the_catalog(tmp_path, monkeypatch, h
     servers, failed = asyncio.run(run())
     assert servers == ["ok", "remote"]  # unaffected servers still aggregate
     assert "TS_TEST_MISSING" in failed["broken"]  # and the cause is named
+
+
+# --- .env loading (GH #6) --------------------------------------------------
+
+
+def test_load_dotenv_file_parses_key_value_pairs(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text(
+        "\n".join(
+            [
+                "# a comment",
+                "",
+                "TOKEN=s3cret",
+                "QUOTED='wrapped'",
+                "DOUBLE=\"also wrapped\"",
+                "SPACED = padded ",
+            ]
+        )
+    )
+    assert load_dotenv_file(path) == {
+        "TOKEN": "s3cret",
+        "QUOTED": "wrapped",
+        "DOUBLE": "also wrapped",
+        "SPACED": "padded",
+    }
+
+
+def test_load_dotenv_file_missing_is_empty_not_an_error(tmp_path):
+    assert load_dotenv_file(tmp_path / "nope.env") == {}
+
+
+def test_expand_env_falls_back_to_overrides(monkeypatch):
+    monkeypatch.delenv("TS_TEST_DOTENV_ONLY", raising=False)
+    result = expand_env(
+        "${TS_TEST_DOTENV_ONLY}",
+        server="x",
+        where="'url'",
+        overrides={"TS_TEST_DOTENV_ONLY": "from-dotenv"},
+    )
+    assert result == "from-dotenv"
+
+
+def test_expand_env_prefers_real_environ_over_overrides(monkeypatch):
+    monkeypatch.setenv("TS_TEST_BOTH", "from-environ")
+    result = expand_env(
+        "${TS_TEST_BOTH}",
+        server="x",
+        where="'url'",
+        overrides={"TS_TEST_BOTH": "from-dotenv"},
+    )
+    assert result == "from-environ"
+
+
+def test_aggregator_reads_dotenv_next_to_config(tmp_path, monkeypatch, http_url):
+    """A token in `.env` next to the config resolves without exporting anything."""
+    monkeypatch.delenv("TS_TEST_AGG_TOKEN", raising=False)
+    cfg = write_config(
+        tmp_path / "c.json",
+        {"remote": {"url": http_url, "headers": {"Authorization": "Bearer ${TS_TEST_AGG_TOKEN}"}}},
+    )
+    (tmp_path / ".env").write_text("TS_TEST_AGG_TOKEN=s3cret\n")
+
+    async def run():
+        agg = Aggregator(cfg)
+        await agg.start()
+        try:
+            return await agg.call("remote", "echo_auth", {})
+        finally:
+            await agg.stop()
+
+    assert "Bearer s3cret" in str(asyncio.run(run()))
+
+
+def test_dotenv_edit_is_picked_up_without_restart(tmp_path, monkeypatch, http_url):
+    """Editing `.env` after startup moves a server from failed to aggregated."""
+    monkeypatch.delenv("TS_TEST_LIVE_TOKEN", raising=False)
+    cfg = write_config(
+        tmp_path / "c.json",
+        {"remote": {"url": http_url, "headers": {"Authorization": "Bearer ${TS_TEST_LIVE_TOKEN}"}}},
+    )
+
+    async def run():
+        agg = Aggregator(cfg)
+        reloaded = asyncio.Event()
+        agg.on_reload(lambda _catalog: reloaded.set() or asyncio.sleep(0))
+        await agg.start()
+        try:
+            before_failed = dict(agg.catalog.failed)
+            await asyncio.sleep(0.05)  # ensure a distinct mtime
+            (tmp_path / ".env").write_text("TS_TEST_LIVE_TOKEN=s3cret\n")
+            await asyncio.wait_for(reloaded.wait(), timeout=30)
+            return before_failed, sorted({t.server for t in agg.catalog.tools})
+        finally:
+            await agg.stop()
+
+    before_failed, after_servers = asyncio.run(run())
+    assert "remote" in before_failed
+    assert after_servers == ["remote"]
 
 
 # --- aggregation (mcp-aggregation spec) ----------------------------------------

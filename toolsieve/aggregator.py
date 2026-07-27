@@ -23,7 +23,7 @@ from fastmcp.client.transports import (
     StreamableHttpTransport,
 )
 
-from .config import ConfigError, ServerConfig, expand_env, load_config
+from .config import ConfigError, ServerConfig, expand_env, load_config, load_dotenv_file
 
 log = logging.getLogger("toolsieve")
 
@@ -74,6 +74,10 @@ class Aggregator:
 
     def __init__(self, config_path: str | Path) -> None:
         self.config_path = Path(config_path)
+        # Same directory as the active config — covers both the repo-local dev
+        # config and ~/.toolsieve/config.json for plugin installs (GH #6).
+        self._dotenv_path = self.config_path.parent / ".env"
+        self._env_overrides: dict[str, str] = {}
         self.catalog = Catalog(tools=[], clients={}, failed={})
         self._stack: AsyncExitStack | None = None
         self._on_reload: list[Any] = []
@@ -125,6 +129,7 @@ class Aggregator:
     async def _aggregate(self) -> None:
         """Connect to every configured server and build a fresh catalog."""
         servers = load_config(self.config_path)
+        self._env_overrides = load_dotenv_file(self._dotenv_path)
         stack = AsyncExitStack()
         tools: list[AggregatedTool] = []
         clients: dict[str, Client] = {}
@@ -171,7 +176,9 @@ class Aggregator:
         )
 
     @staticmethod
-    def _transport(server: ServerConfig) -> ClientTransport:
+    def _transport(
+        server: ServerConfig, env_overrides: dict[str, str] | None = None
+    ) -> ClientTransport:
         """Pick a transport from the config shape (issue #1).
 
         The `/sse` suffix rule is fastmcp's own `infer_transport` convention;
@@ -180,9 +187,11 @@ class Aggregator:
         if server.url is not None:
             # Expanded here, not at load time, so an unset ${VAR} fails this one
             # server through the isolation path below rather than the whole file.
-            url = expand_env(server.url, server=server.name, where="'url'")
+            url = expand_env(server.url, server=server.name, where="'url'", overrides=env_overrides)
             headers = {
-                key: expand_env(value, server=server.name, where=f"header '{key}'")
+                key: expand_env(
+                    value, server=server.name, where=f"header '{key}'", overrides=env_overrides
+                )
                 for key, value in (server.headers or {}).items()
             }
             http = SSETransport if url.rstrip("/").endswith("/sse") else StreamableHttpTransport
@@ -195,7 +204,8 @@ class Aggregator:
         )
 
     async def _connect(self, stack: AsyncExitStack, server: ServerConfig) -> Client:
-        return await stack.enter_async_context(Client(self._transport(server)))
+        transport = self._transport(server, self._env_overrides)
+        return await stack.enter_async_context(Client(transport))
 
     async def _connect_and_list(
         self, stack: AsyncExitStack, server: ServerConfig
@@ -268,15 +278,15 @@ class Aggregator:
                 ) from retry_exc
 
     async def _watch_config(self) -> None:
-        """Re-aggregate when the config file changes (D8).
+        """Re-aggregate when the config file or `.env` changes (D8, GH #6).
 
-        ponytail: mtime poll, not a filesystem-watch dependency. One stat() per
-        second against one file. Swap to `watchfiles` only if watching a tree.
+        ponytail: mtime poll, not a filesystem-watch dependency. Two stat()s per
+        second against two files. Swap to `watchfiles` only if watching a tree.
         """
-        last = self._mtime()
+        last = self._mtimes()
         while True:
             await asyncio.sleep(RELOAD_POLL_SECONDS)
-            current = self._mtime()
+            current = self._mtimes()
             if current == last:
                 continue
             last = current
@@ -290,8 +300,12 @@ class Aggregator:
             for callback in self._on_reload:
                 await callback(self.catalog)
 
-    def _mtime(self) -> float | None:
+    def _mtimes(self) -> tuple[float | None, float | None]:
+        return (self._mtime(self.config_path), self._mtime(self._dotenv_path))
+
+    @staticmethod
+    def _mtime(path: Path) -> float | None:
         try:
-            return self.config_path.stat().st_mtime
+            return path.stat().st_mtime
         except OSError:
             return None
