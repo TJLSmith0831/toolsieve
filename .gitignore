@@ -26,3 +26,4 @@ toolsieve.config.*
 
 .claude/
 openspec/
+.env
