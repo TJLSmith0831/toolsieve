@@ -28,6 +28,25 @@ entry on merge, so use a conventional-commit prefix:
 
 Example: `feat: add Codex CLI support to the migration script`.
 
+## Releasing
+
+Version bumps go in their own PR off a `release/vX.Y.Z` branch — bump
+`version` in `pyproject.toml`, nothing else. On merge to `main`,
+`.github/workflows/release.yml` tags `vX.Y.Z`, pushes it, and creates the
+GitHub Release from `CHANGELOG.md`. It skips silently if that tag exists, so
+merging anything without a bump is a no-op.
+
+Publishing to PyPI is in the same workflow but **off by default**: it runs
+only when the repo variable `PYPI_AUTOPUBLISH` is `true` (Settings → Secrets
+and variables → Actions → Variables). Turning it on requires PyPI-side setup
+first — add `toolsieve` as a Trusted Publisher (GitHub, owner
+`TJLSmith0831`, repo `toolsieve`, workflow `release.yml`). No API token is
+stored in this repo.
+
+PyPI versions cannot be overwritten or deleted. Publish a version by hand
+(`uv build && uv publish`) and confirm `uvx toolsieve` resolves from the real
+index before enabling the automatic path.
+
 ## Design docs
 
 Plans, decisions, and specs live in `openspec/changes/` (see `AGENTS.md`),

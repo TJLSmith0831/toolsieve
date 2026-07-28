@@ -21,13 +21,10 @@ real servers behind it.** Do not finish with an empty catalog.
 
 ## Steps
 
-**1. Find the repo.** The setup script lives at `scripts/setup_toolsieve.py` in
-the toolsieve checkout. If you don't know where that is, ask — don't guess a path.
-
-**2. Show what exists.**
+**1. Show what exists.** No checkout needed — `uvx` fetches toolsieve on demand.
 
 ```bash
-uv run python scripts/setup_toolsieve.py --list
+uvx toolsieve-setup --list
 ```
 
 This prints every client config found and how each of its servers will be
@@ -36,14 +33,14 @@ marked:
 
 - `✓ stdio — moves`
 - `✓ http, has auth headers — moves`
-- `! http, no auth headers — moves; may need a token` — **handle these, step 3.5**
+- `! http, no auth headers — moves; may need a token` — **handle these, step 3**
 - `– ... left as-is` — has neither a `command` nor a `url`; nothing to move
 
-**3. Pick the client.** If exactly one client has servers, use it and say which
+**2. Pick the client.** If exactly one client has servers, use it and say which
 you picked. If several do, ask the user which to configure — do not configure
 all of them silently.
 
-**3.5. Walk the user through auth for every `!` server.** Do not skip this and
+**3. Walk the user through auth for every `!` server.** Do not skip this and
 do not guess. A `!` means the entry is HTTP with no auth headers, which is
 ambiguous by construction: it is either an open server or one the *client*
 authenticated via OAuth, holding the token in its own credential store where
@@ -78,7 +75,7 @@ pass that warning on.
 **4. Dry run, and show the user the plan.**
 
 ```bash
-uv run python scripts/setup_toolsieve.py --client <key> --dry-run
+uvx toolsieve-setup --client <key> --dry-run
 ```
 
 Report exactly which servers move and which stay. This is a change to the user's
@@ -87,7 +84,7 @@ working tool setup — they should see it before it happens.
 **5. Apply only after the user agrees.**
 
 ```bash
-uv run python scripts/setup_toolsieve.py --client <key> --apply
+uvx toolsieve-setup --client <key> --apply
 ```
 
 The script backs up both files it touches (`*.toolsieve-bak`) before writing.
@@ -95,13 +92,17 @@ The script backs up both files it touches (`*.toolsieve-bak`) before writing.
 **6. Verify, don't assume.** Confirm the catalog is non-empty:
 
 ```bash
-TOOLSIEVE_CONFIG=~/.toolsieve/config.json uv run python demo.py
+uvx toolsieve-setup --verify
 ```
 
-Report the tool count and the savings percentage. If the count is 0 or a server
-shows as failed, say so and diagnose it — a silent empty catalog is the failure
-mode this skill exists to prevent. A migrated HTTP server that now shows as
-failed almost always means step 3.5 was skipped or its token is wrong.
+Report the tool count. If the count is 0 or a server shows as failed, say so and
+diagnose it — a silent empty catalog is the failure mode this skill exists to
+prevent. A migrated HTTP server that now shows as failed almost always means
+step 3 was skipped or its token is wrong.
+
+`--verify` deliberately reports no savings percentage: savings accumulate per
+routing call, so the number is zero until the user's agent actually calls
+`find_tools`. Point them at `get_savings_report` after a session's real work.
 
 **7. Tell them to restart the client.** MCP servers are launched at client
 startup; the change is not live until then.

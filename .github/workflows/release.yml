@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  # PyPI Trusted Publishing mints a short-lived token from this — no stored secret.
+  id-token: write
 
 jobs:
   release:
@@ -39,3 +41,16 @@ jobs:
           gh release create "v${{ steps.version.outputs.version }}" \
             --title "v${{ steps.version.outputs.version }}" \
             --notes-file release_notes.md
+
+      # Dormant until the PYPI_AUTOPUBLISH repo variable is set to 'true'
+      # (Settings → Secrets and variables → Actions → Variables). 0.3.0 gets
+      # published by hand first so the first-ever release is one a human checked
+      # — PyPI versions cannot be overwritten or deleted (D15).
+      - uses: astral-sh/setup-uv@v3
+        if: steps.check.outputs.exists == 'false' && vars.PYPI_AUTOPUBLISH == 'true'
+
+      - name: Publish to PyPI
+        if: steps.check.outputs.exists == 'false' && vars.PYPI_AUTOPUBLISH == 'true'
+        run: |
+          uv build
+          uv publish --trusted-publishing always

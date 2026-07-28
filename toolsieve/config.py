@@ -12,7 +12,10 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_CONFIG_PATH = Path("toolsieve.config.json")
+# One default, whatever the install method — PyPI, plugin, or checkout. An
+# installed `toolsieve` runs from an arbitrary cwd, so a cwd-relative default
+# would resolve differently per invocation (D1).
+DEFAULT_CONFIG_PATH = Path.home() / ".toolsieve/config.json"
 
 # ${VAR} references inside `url` and `headers` values — the same convention
 # Claude Code's own .mcp.json uses, so an entry stays copy-pasteable.

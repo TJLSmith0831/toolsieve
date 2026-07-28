@@ -17,7 +17,7 @@ FastMCP.
 - `toolsieve/aggregator.py` — connects to every downstream server, builds the tool `Catalog`
 - `toolsieve/router.py` — embedding match + `Savings`/token accounting
 - `toolsieve/config.py` — `mcpServers`-shaped config + `.env` loading (GH #6)
-- `scripts/setup_toolsieve.py` — migrates a client's existing MCP config (Claude Code/Desktop, Cursor, Windsurf, VS Code, Codex CLI) into toolsieve's
+- `toolsieve/setup.py` — the `toolsieve-setup` console script: migrates a client's existing MCP config (Claude Code/Desktop, Cursor, Windsurf, VS Code, Codex CLI) into toolsieve's, and `--verify` checks the result
 - `tests/fake_server.py` — the real stdio/HTTP MCP servers the test suite runs against
 - `benchmarks/` — routing-accuracy benchmark (naive vs BM25 vs toolsieve); see `benchmarks/RESULTS.md`
 

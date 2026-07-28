@@ -9,15 +9,22 @@ dependencies = [
     "fastmcp>=2.0",
     # fastembed brings numpy + onnxruntime; cosine top-k is done directly (D9 amended)
     "fastembed>=0.5",
+    # Format-preserving TOML writer for toolsieve/setup.py's Codex CLI target — a
+    # hand-edited config keeps its comments after --apply. Runtime, not dev-only:
+    # `uvx toolsieve-setup --client codex --apply` has no dev group (D12).
+    "tomlkit>=0.13",
 ]
 
-[tool.uv]
-package = false
+[project.scripts]
+toolsieve = "toolsieve.server:main"
+toolsieve-setup = "toolsieve.setup:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
-# tomlkit: format-preserving TOML writer for scripts/setup_toolsieve.py's Codex
-# CLI target — a hand-edited config keeps its comments after --apply.
-dev = ["pytest>=8.0", "tomlkit>=0.13"]
+dev = ["pytest>=8.0"]
 # Benchmark-only (D4). Never a runtime dependency of the MCP server: real BM25
 # and a real tokenizer are what make the published numbers defensible.
 bench = ["tiktoken>=0.7", "rank-bm25>=0.2.2"]

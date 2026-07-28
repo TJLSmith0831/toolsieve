@@ -2100,11 +2100,12 @@ wheels = [
 
 [[package]]
 name = "toolsieve"
-version = "0.2.0"
-source = { virtual = "." }
+version = "0.2.1"
+source = { editable = "." }
 dependencies = [
     { name = "fastembed" },
     { name = "fastmcp" },
+    { name = "tomlkit" },
 ]
 
 [package.dev-dependencies]
@@ -2114,13 +2115,13 @@ bench = [
 ]
 dev = [
     { name = "pytest" },
-    { name = "tomlkit" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastembed", specifier = ">=0.5" },
     { name = "fastmcp", specifier = ">=2.0" },
+    { name = "tomlkit", specifier = ">=0.13" },
 ]
 
 [package.metadata.requires-dev]
@@ -2128,10 +2129,7 @@ bench = [
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "tiktoken", specifier = ">=0.7" },
 ]
-dev = [
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "tomlkit", specifier = ">=0.13" },
-]
+dev = [{ name = "pytest", specifier = ">=8.0" }]
 
 [[package]]
 name = "tqdm"
