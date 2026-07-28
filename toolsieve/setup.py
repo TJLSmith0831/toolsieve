@@ -4,9 +4,10 @@ Finds the client's existing MCP config, migrates its stdio `mcpServers` entries
 into toolsieve's own config, and registers toolsieve with the client in their
 place — so the agent sees toolsieve's three tools instead of every server's.
 
-    uv run python scripts/setup_toolsieve.py --list
-    uv run python scripts/setup_toolsieve.py --client claude-code --dry-run
-    uv run python scripts/setup_toolsieve.py --client claude-code --apply
+    uvx toolsieve-setup --list
+    uvx toolsieve-setup --client claude-code --dry-run
+    uvx toolsieve-setup --client claude-code --apply
+    uvx toolsieve-setup --verify
 
 Nothing is written without --apply, and every file it edits is backed up first.
 """
@@ -14,6 +15,7 @@ Nothing is written without --apply, and every file it edits is backed up first.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import re
@@ -23,8 +25,11 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+import tomlkit
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
+
 HOME = Path.home()
-REPO = Path(__file__).resolve().parents[1]
 TOOLSIEVE_CONFIG = Path(os.environ.get("TOOLSIEVE_CONFIG", HOME / ".toolsieve/config.json"))
 
 
@@ -135,13 +140,15 @@ Servers marked ! are HTTP with no auth headers in the client config.
     Keep the token in your shell profile or secret manager, not in this file.
 
   After adding a token, verify with:
-      TOOLSIEVE_CONFIG=%s uv run python demo.py""" % TOOLSIEVE_CONFIG
+      toolsieve-setup --verify"""
 
 
 def toolsieve_entry() -> dict:
+    # No path to a checkout: the entry has to work on any machine with uv, since
+    # a migrated client config outlives the machine it was written on (D7).
     return {
-        "command": "uv",
-        "args": ["run", "--directory", str(REPO), "python", "-m", "toolsieve"],
+        "command": "uvx",
+        "args": ["toolsieve"],
         "env": {"TOOLSIEVE_CONFIG": str(TOOLSIEVE_CONFIG)},
     }
 
@@ -187,8 +194,6 @@ def write_client_config(target: ClientTarget, movable: dict) -> None:
     comments and formatting — tomllib, used for reading, is read-only.
     """
     if target.fmt == "toml":
-        import tomlkit
-
         doc = tomlkit.parse(target.path.read_text()) if target.path.exists() else tomlkit.document()
         node = doc
         for key in target.section:
@@ -269,6 +274,45 @@ def cmd_setup(client: str, apply: bool) -> int:
 
     print(f"\nDone. Backup of the client config: {backup}")
     print(f"Restart {target.label} to pick up the change.")
+    print("Verify the catalog is non-empty first:  toolsieve-setup --verify")
+    return 0
+
+
+async def _verify() -> int:
+    """Talk to toolsieve over stdio the way a real client would, report the catalog.
+
+    demo.py covers this for a checkout; an installed user has no demo.py, and a
+    silently empty catalog is the failure this check exists to catch (D13).
+    """
+    if not TOOLSIEVE_CONFIG.exists():
+        print(f"No toolsieve config at {TOOLSIEVE_CONFIG}.")
+        print("Run --list to find your client's servers, then --client <key> --apply.")
+        return 1
+
+    servers = read_config(TOOLSIEVE_CONFIG, "json").get("mcpServers", {})
+    print(f"toolsieve config: {TOOLSIEVE_CONFIG}  ({len(servers)} server(s))")
+
+    transport = StdioTransport(
+        command=sys.executable,
+        args=["-m", "toolsieve"],
+        env={**os.environ, "TOOLSIEVE_CONFIG": str(TOOLSIEVE_CONFIG)},
+    )
+    async with Client(transport) as client:
+        report = (await client.call_tool("get_savings_report", {})).data
+
+    unavailable = report.get("unavailable_servers") or {}
+    print(f"  {report['tools_aggregated']} tools aggregated "
+          f"across {len(servers) - len(unavailable)} server(s)")
+    for name, reason in unavailable.items():
+        print(f"  ⚠ {name} unavailable, its tools are missing: {reason}")
+    # No savings number here: it is a cumulative counter, zero until something
+    # actually routes, so printing it would read as "toolsieve saves nothing"
+    # (D13 amended). demo.py routes first, which is why it can report one.
+
+    if not report["tools_aggregated"]:
+        print("\nEmpty catalog — find_tools will match nothing. Check the server "
+              "entries above and any ${VAR} tokens they reference.")
+        return 1
     return 0
 
 
@@ -278,8 +322,12 @@ def main() -> int:
     parser.add_argument("--client", help="client key from --list")
     parser.add_argument("--apply", action="store_true", help="write changes (default is dry run)")
     parser.add_argument("--dry-run", action="store_true", help="explicit no-op default")
+    parser.add_argument("--verify", action="store_true",
+                        help="connect to toolsieve and report its aggregated catalog")
     args = parser.parse_args()
 
+    if args.verify:
+        return asyncio.run(_verify())
     if args.list or not args.client:
         return cmd_list()
     return cmd_setup(args.client, apply=args.apply and not args.dry_run)

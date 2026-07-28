@@ -1,24 +1,18 @@
-"""TDD for Codex CLI (TOML) support in scripts/setup_toolsieve.py. Run: uv run pytest -q"""
+"""TDD for Codex CLI (TOML) support in toolsieve/setup.py. Run: uv run pytest -q"""
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 import tomllib
-from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "setup_toolsieve.py"
+from toolsieve import setup as ts_setup
 
 
 def load_module(monkeypatch, tmp_path):
-    spec = importlib.util.spec_from_file_location("setup_toolsieve", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module  # dataclass annotation resolution needs this registered
-    spec.loader.exec_module(module)
-    monkeypatch.setattr(module, "HOME", tmp_path)
-    monkeypatch.setattr(module, "TOOLSIEVE_CONFIG", tmp_path / ".toolsieve/config.json")
-    return module
+    """Point the module's HOME/config at tmp_path; monkeypatch reverts per test."""
+    monkeypatch.setattr(ts_setup, "HOME", tmp_path)
+    monkeypatch.setattr(ts_setup, "TOOLSIEVE_CONFIG", tmp_path / ".toolsieve/config.json")
+    return ts_setup
 
 
 def test_targets_includes_codex(monkeypatch, tmp_path):
@@ -57,7 +51,9 @@ def test_cmd_setup_apply_writes_codex_toml(monkeypatch, tmp_path):
     assert "# codex config, hand-edited" in written  # tomlkit preserved the comment
     data = tomllib.loads(written)
     assert "foo" not in data["mcp_servers"]  # migrated server removed
-    assert data["mcp_servers"]["toolsieve"]["command"] == "uv"
+    # Portable, not pinned to a checkout — a migrated config outlives its machine (D7).
+    assert data["mcp_servers"]["toolsieve"]["command"] == "uvx"
+    assert data["mcp_servers"]["toolsieve"]["args"] == ["toolsieve"]
 
     ts_config = json.loads(module.TOOLSIEVE_CONFIG.read_text())
     assert ts_config["mcpServers"]["foo"] == {"command": "uv", "args": ["run", "foo"]}

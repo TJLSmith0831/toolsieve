@@ -142,6 +142,18 @@ arguments from free text. You see the real schema before you call.
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
+uvx toolsieve
+```
+
+That's it — `uvx` fetches and runs it, no checkout. To keep it installed:
+
+```bash
+pip install toolsieve
+```
+
+Contributing, or want the demo and benchmarks? Clone instead:
+
+```bash
 git clone https://github.com/TJLSmith0831/toolsieve
 cd toolsieve
 uv sync
@@ -152,13 +164,14 @@ uv sync
 #### Migrate an existing client config
 
 Already have `mcpServers` configured in Claude Code, Claude Desktop, Cursor,
-Windsurf, VS Code, or Codex CLI? `scripts/setup_toolsieve.py` moves those
-entries behind toolsieve for you instead of hand-copying config:
+Windsurf, VS Code, or Codex CLI? `toolsieve-setup` moves those entries behind
+toolsieve for you instead of hand-copying config:
 
 ```bash
-uv run python scripts/setup_toolsieve.py --list                       # discover configs across every known client
-uv run python scripts/setup_toolsieve.py --client claude-code --dry-run  # preview the migration
-uv run python scripts/setup_toolsieve.py --client claude-code --apply    # write it
+uvx toolsieve-setup --list                            # discover configs across every known client
+uvx toolsieve-setup --client claude-code --dry-run    # preview the migration
+uvx toolsieve-setup --client claude-code --apply      # write it
+uvx toolsieve-setup --verify                          # confirm the catalog is non-empty
 ```
 
 Nothing is written without `--apply`. Every file the script edits is backed
@@ -171,9 +184,10 @@ lives in the client via OAuth — a case toolsieve can't resolve for you (see
 
 Or configure it by hand:
 
-Create `toolsieve.config.json`. It's the same `mcpServers` shape Claude Desktop
-and Claude Code use, so entries are usually copy-pasteable from a config you
-already have:
+Create `~/.toolsieve/config.json` — the one place toolsieve looks unless
+`TOOLSIEVE_CONFIG` says otherwise, whichever way you installed it. It's the same
+`mcpServers` shape Claude Desktop and Claude Code use, so entries are usually
+copy-pasteable from a config you already have:
 
 ```json
 {
@@ -213,8 +227,8 @@ profile or secret manager, not in this file.**
 **OAuth is not supported.** If your client authenticated a server through an
 OAuth flow, that token lives in the client's own credential store and toolsieve
 can't reuse it — you need a bearer token or API key from that service instead.
-`scripts/setup_toolsieve.py` flags such entries with a `!` rather than silently
-migrating them into something that 401s on every call.
+`toolsieve-setup` flags such entries with a `!` rather than silently migrating
+them into something that 401s on every call.
 
 ### Run
 
@@ -224,16 +238,37 @@ As an MCP server, from any client:
 {
   "mcpServers": {
     "toolsieve": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/toolsieve", "python", "-m", "toolsieve"],
-      "env": { "TOOLSIEVE_CONFIG": "/path/to/toolsieve.config.json" }
+      "command": "uvx",
+      "args": ["toolsieve"]
     }
   }
 }
 ```
 
-Or see it work end to end. With no config, this runs against two real stdio MCP
-servers the repo ships, so it works on a fresh clone with nothing else installed:
+No path, so the same entry works on any machine with `uv`. It reads
+`~/.toolsieve/config.json`; add `"env": { "TOOLSIEVE_CONFIG": "/some/other.json" }`
+to point it elsewhere. Running from a clone instead:
+
+```json
+{
+  "mcpServers": {
+    "toolsieve": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/toolsieve", "python", "-m", "toolsieve"]
+    }
+  }
+}
+```
+
+To check a migration worked without restarting your client:
+
+```bash
+uvx toolsieve-setup --verify
+```
+
+Or see it work end to end from a clone. With no config, this runs against two real
+stdio MCP servers the repo ships, so it works on a fresh clone with nothing else
+installed:
 
 ```bash
 uv run python demo.py
@@ -256,7 +291,7 @@ path, so it survives plugin updates.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TOOLSIEVE_CONFIG` | `toolsieve.config.json` | Path to the `mcpServers` config |
+| `TOOLSIEVE_CONFIG` | `~/.toolsieve/config.json` | Path to the `mcpServers` config |
 | `TOOLSIEVE_CONFIDENCE_THRESHOLD` | `0.70` | Below this, matches are flagged `confidence: "low"` |
 | `TOOLSIEVE_LOG_LEVEL` | `WARNING` | Set `INFO` to see aggregation and match logging |
 
