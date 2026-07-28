@@ -125,9 +125,16 @@ def literal_secrets(name: str, entry: dict) -> list[str]:
 AUTH_HELP = """\
 Servers marked ! are HTTP with no auth headers in the client config.
   - If the server is open (many doc servers are), nothing to do.
-  - If your client authenticated it via OAuth, that token lives in the client,
-    not in this file — toolsieve cannot reuse it. Issue the server a bearer
-    token or API key and reference it from an environment variable:
+  - If it uses OAuth, --apply offers to sign you in at the end. You can also
+    run it any time:
+
+      toolsieve-auth            # pick from the servers that need it
+      toolsieve-auth myserver   # just this one
+
+    The browser opens once; the token is stored under ~/.toolsieve/oauth/ and
+    refreshed automatically after that.
+  - If it takes a bearer token or API key instead, put it in a header and keep
+    the value in an environment variable:
 
       "myserver": {
         "url": "https://example.com/mcp",
@@ -139,7 +146,7 @@ Servers marked ! are HTTP with no auth headers in the client config.
     unauthenticated call, and never at the expense of your other servers.
     Keep the token in your shell profile or secret manager, not in this file.
 
-  After adding a token, verify with:
+  Either way, verify with:
       toolsieve-setup --verify"""
 
 
@@ -273,9 +280,38 @@ def cmd_setup(client: str, apply: bool) -> int:
     write_client_config(target, movable)
 
     print(f"\nDone. Backup of the client config: {backup}")
+
+    # The one moment a human is already here (D4). Servers that were flagged
+    # may just be open, so the wizard asks each one before offering it.
+    if flagged:
+        run_auth_wizard(flagged)
+
     print(f"Restart {target.label} to pick up the change.")
     print("Verify the catalog is non-empty first:  toolsieve-setup --verify")
     return 0
+
+
+def run_auth_wizard(flagged: list[str]) -> None:
+    """Offer to sign in to the just-migrated servers that turn out to need it.
+
+    Delegates to `toolsieve-auth`'s own wizard rather than reimplementing it,
+    so the migration path and the standalone command stay one behavior (D5).
+    """
+    from .auth_cli import authorize_server, env_for, unauthorized_servers
+    from .config import load_config
+
+    names = [n for n in unauthorized_servers(TOOLSIEVE_CONFIG) if n in flagged]
+    if not names:
+        return
+
+    import questionary
+
+    print()
+    picked = questionary.checkbox("Authorize which servers now?", choices=names).ask()
+    env_overrides = env_for(TOOLSIEVE_CONFIG)
+    for name in picked or []:
+        server = next(s for s in load_config(TOOLSIEVE_CONFIG) if s.name == name)
+        authorize_server(server, env_overrides=env_overrides)
 
 
 async def _verify() -> int:

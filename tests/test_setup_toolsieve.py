@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import tomllib
 
+import pytest
+
 from toolsieve import setup as ts_setup
 
 
@@ -75,3 +77,50 @@ def test_cmd_setup_dry_run_does_not_write_codex_toml(monkeypatch, tmp_path):
     assert result == 0
     assert codex_path.read_text() == original
     assert not module.TOOLSIEVE_CONFIG.exists()
+
+
+# --- OAuth wizard hook after --apply (task 4.1, D4/D10) ------------------------
+
+
+def _codex_with(monkeypatch, tmp_path, servers_toml: str):
+    """A Codex client config holding `servers_toml`, ready for --apply."""
+    module = load_module(monkeypatch, tmp_path)
+    codex_path = tmp_path / ".codex/config.toml"
+    codex_path.parent.mkdir(parents=True)
+    codex_path.write_text(servers_toml)
+    return module
+
+
+def test_apply_offers_the_wizard_for_flagged_servers(monkeypatch, tmp_path):
+    """Scenario: Flagged servers offered after a successful apply.
+
+    A migration is the one moment a human is already at the terminal, so the
+    servers that may need signing in are offered there instead of described
+    in help text the user has to act on later (D4).
+    """
+    module = _codex_with(
+        monkeypatch, tmp_path, '[mcp_servers.gated]\nurl = "https://example.test/mcp"\n'
+    )
+    called = {}
+    monkeypatch.setattr(
+        module, "run_auth_wizard", lambda names: called.setdefault("names", list(names))
+    )
+
+    assert module.cmd_setup("codex", apply=True) == 0
+    assert called["names"] == ["gated"]
+
+
+def test_apply_does_not_prompt_when_nothing_is_flagged(monkeypatch, tmp_path):
+    """Scenario: No flagged servers."""
+    module = _codex_with(
+        monkeypatch,
+        tmp_path,
+        '[mcp_servers.local]\ncommand = "uv"\nargs = ["run", "x"]\n',
+    )
+    monkeypatch.setattr(
+        module,
+        "run_auth_wizard",
+        lambda names: pytest.fail("prompted with nothing flagged"),
+    )
+
+    assert module.cmd_setup("codex", apply=True) == 0

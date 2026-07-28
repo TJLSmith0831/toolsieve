@@ -13,11 +13,15 @@ dependencies = [
     # hand-edited config keeps its comments after --apply. Runtime, not dev-only:
     # `uvx toolsieve-setup --client codex --apply` has no dev group (D12).
     "tomlkit>=0.13",
+    # Checkbox multi-select for the `toolsieve-auth` wizard (D12). Runtime, not
+    # dev-only: the wizard is what `uvx toolsieve-auth` exists to run.
+    "questionary>=2.0",
 ]
 
 [project.scripts]
 toolsieve = "toolsieve.server:main"
 toolsieve-setup = "toolsieve.setup:main"
+toolsieve-auth = "toolsieve.auth_cli:main"
 
 [build-system]
 requires = ["hatchling"]

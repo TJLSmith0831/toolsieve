@@ -40,18 +40,25 @@ marked:
 you picked. If several do, ask the user which to configure — do not configure
 all of them silently.
 
-**3. Walk the user through auth for every `!` server.** Do not skip this and
-do not guess. A `!` means the entry is HTTP with no auth headers, which is
-ambiguous by construction: it is either an open server or one the *client*
-authenticated via OAuth, holding the token in its own credential store where
-toolsieve cannot reach it. Migrating an OAuth-backed server without a token
-produces a server that aggregates zero tools, or 401s on every call.
+**3. Handle auth for every `!` server.** A `!` means the entry is HTTP with no
+auth headers, which is ambiguous by construction: it is either an open server
+or one that authenticates with OAuth. You do not have to resolve that
+ambiguity yourself — at the end of `--apply`, toolsieve asks each flagged
+server directly and offers a checkbox of the ones that actually need signing
+in. Let the user tick what they want and complete the browser flow.
 
-For each `!` server, ask the user which it is:
+The same wizard is available any time, so nothing is lost if they skip it:
 
-- **Open / no auth** (many docs servers, e.g. `mcp.mintlify.com`) — nothing to do.
-- **Needs auth** — it needs a bearer token or API key of its own. Tell the user
-  to issue one from that service, export it, and reference it from the config:
+```bash
+toolsieve-auth
+```
+
+Two cases still need you:
+
+- **Open / no auth** (many docs servers, e.g. `mcp.mintlify.com`) — nothing to
+  do; it will not appear in the wizard.
+- **Takes a bearer token or API key** rather than OAuth — tell the user to
+  issue one from that service, export it, and reference it from the config:
 
   ```json
   "linear": {
@@ -63,9 +70,6 @@ For each `!` server, ask the user which it is:
   `${VAR}` is read from the environment toolsieve runs in. If it is unset, that
   one server fails with an error naming the variable — never a silent
   unauthenticated call, and never at the expense of the user's other servers.
-
-- **OAuth-only, no token available** — say so plainly and leave it in the client
-  config. toolsieve cannot proxy an OAuth session it does not hold.
 
 **Never write a token into the config file literally**, and never ask the user to
 paste one to you. Reference an environment variable and let them set it. If the
@@ -111,11 +115,14 @@ startup; the change is not live until then.
 
 - **Never edit a client config by hand.** Use the script — it handles the
   per-client file layouts and makes the backups.
-- **Tokens live in the environment, never in the config file.** `${VAR}` is the
-  only supported way to supply one.
-- **OAuth is not supported.** If a server only authenticates via an OAuth flow
-  the client performed, it cannot move behind toolsieve. Say so plainly rather
-  than migrating it into a permanently failing entry.
+- **Static tokens live in the environment, never in the config file.** `${VAR}`
+  is the only supported way to supply one.
+- **OAuth servers need no config at all** — just a `url`. Auth is detected from
+  the server's own `401`/`WWW-Authenticate` response, so never add an
+  `"auth"` key or invent one; there isn't one. Point the user at
+  `toolsieve-auth` and let the browser flow do it.
+- **Never run `toolsieve-auth` for the user unattended.** It opens a browser
+  for them to sign in to their own account; it is theirs to run.
 - **Savings scale with catalog size.** Routing 3 of 4 tools saves nothing;
   3 of 15 saves ~80%. If the user migrates only one small server and is
   unimpressed, that is the reason — tell them.
