@@ -123,6 +123,42 @@ def test_non_interactive_oauth_does_not_wait_for_a_callback(tmp_path):
         asyncio.run(auth.callback_handler())
 
 
+def test_registers_as_a_public_client(tmp_path, oauth_url):
+    """Scenario: dynamic client registration declares a public (no-secret) client.
+
+    toolsieve is a CLI process — it cannot keep a client_secret confidential,
+    it would just sit in a plaintext token file next to the access token
+    itself (D17). Declaring `token_endpoint_auth_method: none` at
+    registration is the correct native-app declaration (RFC 8252 / OAuth
+    2.1), and it also avoids a real failure: a server that defaults an
+    unspecified client to `client_secret_basic` (confirmed against Linear)
+    gets a token request carrying both an `Authorization: Basic` header and
+    `client_id` in the body, which a spec-strict authorization server
+    rejects as "multiple authentication methods".
+    """
+    token_dir = tmp_path / "oauth"
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
+
+    async def run():
+        # Unauthorized — this fails past discovery and DCR, before the
+        # interactive step NonInteractiveOAuth refuses (D16). Registration
+        # has already happened by the time it fails.
+        agg = Aggregator(cfg, token_dir=token_dir)
+        await agg.start()
+        await agg.stop()
+
+    asyncio.run(run())
+
+    async def registered():
+        auth = NonInteractiveOAuth(mcp_url=oauth_url, token_storage=token_store(token_dir))
+        return await auth.token_storage_adapter.get_client_info()
+
+    client_info = asyncio.run(registered())
+    assert client_info is not None
+    assert client_info.token_endpoint_auth_method == "none"
+    assert client_info.client_secret is None
+
+
 # --- aggregator wiring (tasks 2.3/2.4, D6, D9, D16) ----------------------------
 
 

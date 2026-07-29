@@ -23,7 +23,7 @@ from .config import (
     load_config,
     load_dotenv_file,
 )
-from .oauth import NonInteractiveOAuth, find_auth_error, token_store
+from .oauth import PUBLIC_CLIENT_METADATA, NonInteractiveOAuth, find_auth_error, token_store
 
 
 def _candidates(config_path: str | Path) -> list[ServerConfig]:
@@ -122,6 +122,7 @@ def authorize_server(
         token_storage=token_store(token_dir),
         callback_port=port,
         client_name="toolsieve",
+        additional_client_metadata=PUBLIC_CLIENT_METADATA,
     )
     if not _can_open_a_browser(webbrowser):
         print(

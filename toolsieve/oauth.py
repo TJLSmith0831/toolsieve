@@ -21,6 +21,16 @@ from key_value.aio.stores.filetree import (
 # whatever the install method (D3).
 DEFAULT_TOKEN_DIR = Path.home() / ".toolsieve/oauth"
 
+# toolsieve is a CLI process: any client_secret it holds sits in a plaintext
+# file, no more confidential than the access token beside it (D17). "none" is
+# the correct native-app declaration (RFC 8252 / OAuth 2.1) for dynamic
+# client registration, and it also sidesteps a real bug: a server that
+# defaults an unspecified client to client_secret_basic (Linear does) sends
+# us a secret, and the mcp SDK's token exchange then puts client_id in the
+# body *and* an Authorization: Basic header — which a spec-strict server
+# rejects as "multiple authentication methods".
+PUBLIC_CLIENT_METADATA = {"token_endpoint_auth_method": "none"}
+
 
 def token_store(directory: Path | str | None = None) -> FileTreeStore:
     """The shared token store, used by both the aggregator and `toolsieve-auth`.

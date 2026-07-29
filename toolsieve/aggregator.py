@@ -25,6 +25,7 @@ from fastmcp.client.transports import (
 
 from .config import ConfigError, ServerConfig, expand_env, load_config, load_dotenv_file
 from .oauth import (
+    PUBLIC_CLIENT_METADATA,
     AuthorizationRequiredError,
     NonInteractiveOAuth,
     find_auth_error,
@@ -239,7 +240,11 @@ class Aggregator:
         url = expand_env(
             server.url or "", server=server.name, where="'url'", overrides=self._env_overrides
         )
-        return NonInteractiveOAuth(mcp_url=url, token_storage=self._token_store)
+        return NonInteractiveOAuth(
+            mcp_url=url,
+            token_storage=self._token_store,
+            additional_client_metadata=PUBLIC_CLIENT_METADATA,
+        )
 
     async def _connect(self, stack: AsyncExitStack, server: ServerConfig) -> Client:
         transport = self._transport(server, self._env_overrides)
