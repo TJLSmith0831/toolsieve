@@ -253,10 +253,11 @@ never sends one, so it just connects.
 
 After that it stays signed in on its own — the stored refresh token is used
 silently, including across restarts. If it is ever revoked, that one server
-drops out of the catalog with a message naming the fix, the rest keep
-working, and `toolsieve-auth <name>` puts it back. **The MCP server process
-never opens a browser**: it has no terminal to show one on, so signing in is
-always something you do deliberately, from your shell.
+fails with a message naming the fix while the rest keep working, and
+`toolsieve-auth <name>` puts it back — the running server picks the new token
+up within a second, with no restart. **The MCP server process never opens a
+browser**: it has no terminal to show one on, so signing in is always
+something you do deliberately, from your shell.
 
 Running on a headless box? The redirect can only return to `localhost` on the
 machine running the command, so `toolsieve-auth` prints the exact

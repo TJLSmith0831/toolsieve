@@ -44,8 +44,11 @@ all of them silently.
 auth headers, which is ambiguous by construction: it is either an open server
 or one that authenticates with OAuth. You do not have to resolve that
 ambiguity yourself — at the end of `--apply`, toolsieve asks each flagged
-server directly and offers a checkbox of the ones that actually need signing
-in. Let the user tick what they want and complete the browser flow.
+server directly and reports which ones actually need signing in. Run from a
+terminal, that is a checkbox for the user to tick; run by you, there is no tty
+to draw one on, so it prints the exact commands instead. Relay those to the
+user and let them run them — a sign-in is theirs to complete, in their own
+browser.
 
 The same wizard is available any time, so nothing is lost if they skip it:
 

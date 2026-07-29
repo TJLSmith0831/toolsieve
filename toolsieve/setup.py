@@ -297,21 +297,10 @@ def run_auth_wizard(flagged: list[str]) -> None:
     Delegates to `toolsieve-auth`'s own wizard rather than reimplementing it,
     so the migration path and the standalone command stay one behavior (D5).
     """
-    from .auth_cli import authorize_server, env_for, unauthorized_servers
-    from .config import load_config
-
-    names = [n for n in unauthorized_servers(TOOLSIEVE_CONFIG) if n in flagged]
-    if not names:
-        return
-
-    import questionary
+    from .auth_cli import authorize_server, wizard
 
     print()
-    picked = questionary.checkbox("Authorize which servers now?", choices=names).ask()
-    env_overrides = env_for(TOOLSIEVE_CONFIG)
-    for name in picked or []:
-        server = next(s for s in load_config(TOOLSIEVE_CONFIG) if s.name == name)
-        authorize_server(server, env_overrides=env_overrides)
+    wizard(TOOLSIEVE_CONFIG, None, authorize_server, only=flagged)
 
 
 async def _verify() -> int:

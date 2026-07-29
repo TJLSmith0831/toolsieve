@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from conftest import browser_stand_in, free_port  # noqa: E402
+from test_oauth import no_terminal  # noqa: E402
 
 FAKE = str(Path(__file__).resolve().parent / "fake_server.py")
 
@@ -333,6 +334,29 @@ def test_list_shows_mixed_present_and_absent_clients(monkeypatch, fake_home, cap
 
 
 # --- full new-user journey ------------------------------------------------------
+
+
+def test_apply_with_a_flagged_server_and_no_terminal_still_finishes(
+    monkeypatch, fake_home, oauth_url, capfd
+):
+    """Scenario: --apply on an OAuth-gated server, run from a pipe or a script.
+
+    The only test that lets the real `run_auth_wizard` run — everything else
+    stubs it, so nothing proved it could not take down a migration that had
+    already written both config files. It could: questionary raises a bare
+    `EOFError` with no tty, and the user was left with a traceback, no
+    "restart your client", and no idea the migration had in fact worked.
+    """
+    module = isolate(monkeypatch, fake_home)
+    no_terminal(monkeypatch)
+    write_client_json(target_for("claude-code"), {"gated": {"url": oauth_url}})
+
+    assert module.cmd_setup("claude-code", apply=True) == 0
+
+    out = capfd.readouterr().out
+    assert "toolsieve-auth gated" in out  # told how to finish the job by hand
+    assert "Restart" in out  # and the instructions after the prompt still ran
+    assert json.loads(module.TOOLSIEVE_CONFIG.read_text())["mcpServers"]["gated"]
 
 
 def test_full_new_user_journey(monkeypatch, fake_home, oauth_url, capfd):

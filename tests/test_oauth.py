@@ -199,6 +199,7 @@ def test_configured_headers_are_used_instead_of_oauth(tmp_path):
                 "headers": {"Authorization": "Bearer static"},
             },
             "headerless": {"url": "https://example.test/mcp"},
+            "sse": {"url": "https://example.test/sse"},
             "local": {"command": sys.executable, "args": [FAKE, "local"]},
         },
     )
@@ -212,6 +213,13 @@ def test_configured_headers_are_used_instead_of_oauth(tmp_path):
 
     assert isinstance(agg._auth_for(servers["headerless"]), NonInteractiveOAuth)
     assert (tmp_path / "oauth").is_dir()
+
+    # SSE is the other half of `is_http`, and the transport it picks is a
+    # different class — one that has to accept the provider too. Nothing else
+    # covers an OAuth-gated `/sse` url.
+    sse_auth = agg._auth_for(servers["sse"])
+    assert isinstance(sse_auth, NonInteractiveOAuth)
+    Aggregator._transport(servers["sse"])._set_auth(sse_auth)  # must not raise
 
 
 # --- toolsieve-auth CLI (section 3, D13-D15) -----------------------------------
@@ -381,6 +389,56 @@ def test_full_authorization_round_trip_persists_a_usable_token(tmp_path, oauth_u
     assert "get_weather" in tools
 
 
+def test_signing_in_reconnects_a_live_server_with_no_restart(tmp_path, oauth_url, monkeypatch):
+    """Scenario: sign in from a second terminal while toolsieve is running.
+
+    This is the exact sentence the failure message hands the user — "run
+    `toolsieve-auth gated` to sign in. It reconnects on its own afterwards,
+    with no restart." It was not true: the watcher polls config.json and .env
+    mtimes, and a sign-in writes to the token store instead, so the user ran
+    the command they were told to, saw "gated authorized.", and watched their
+    tools stay missing — being told again, by the same message, that it should
+    have worked.
+
+    Driven through `main` rather than `authorize_server`, because the fix
+    lives on the CLI's path and the point is that a real invocation is enough.
+    """
+    browser_stand_in(monkeypatch)
+    token_dir = tmp_path / "oauth"
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
+
+    async def run():
+        agg = Aggregator(cfg, token_dir=token_dir)
+        await agg.start()
+        try:
+            assert agg.catalog.failed, "must start out unauthorized, or this proves nothing"
+
+            # A thread, not an await: this is a second process in real life,
+            # and the aggregator's watcher has to keep polling meanwhile.
+            code = await asyncio.to_thread(
+                main,
+                ["gated"],
+                config_path=cfg,
+                token_dir=token_dir,
+                authorize=lambda server, **kw: authorize_server(
+                    server, token_dir=token_dir, port=free_port()
+                ),
+            )
+            assert code == 0
+
+            for _ in range(40):  # generous: the watcher polls once a second
+                await asyncio.sleep(0.1)
+                if not agg.catalog.failed:
+                    return sorted(t.name for t in agg.catalog.tools)
+            return None
+        finally:
+            await agg.stop()
+
+    tools = asyncio.run(run())
+    assert tools is not None, "still unavailable after signing in — no restart-free reconnect"
+    assert "get_weather" in tools
+
+
 def test_headless_run_prints_the_port_forward_it_needs(tmp_path, oauth_url, monkeypatch, capsys):
     """Scenario: No local browser available.
 
@@ -403,6 +461,180 @@ def test_headless_run_prints_the_port_forward_it_needs(tmp_path, oauth_url, monk
     assert f"ssh -L {port}:localhost:{port}" in out
     # Guidance, not a dead end: with the tunnel up the flow still completes.
     assert "gated authorized." in out
+
+
+def test_expired_access_token_refreshes_without_a_human(tmp_path, oauth_url, monkeypatch):
+    """Scenario: expired access token, valid refresh token.
+
+    The path every long-lived toolsieve session takes an hour after signing
+    in, and the one D16 leans hardest on: `NonInteractiveOAuth` refuses the
+    two interactive steps, so if refresh did not come through inherited and
+    intact, every server would degrade to "needs authorization" on the hour.
+    Nothing else in this file exercises it — a fresh token never expires
+    inside a test.
+    """
+    port = free_port()
+    token_dir = tmp_path / "oauth"
+    browser_stand_in(monkeypatch)
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
+    authorize_server(load_config(cfg)[0], token_dir=token_dir, port=port)
+
+    async def expire() -> str:
+        """Age the stored access token out, keeping the refresh token."""
+        auth = NonInteractiveOAuth(mcp_url=oauth_url, token_storage=token_store(token_dir))
+        tokens = await auth.token_storage_adapter.get_tokens()
+        assert tokens.refresh_token, "the fake provider must issue refresh tokens"
+        await auth.token_storage_adapter.set_tokens(
+            tokens.model_copy(update={"expires_in": -1})
+        )
+        return tokens.access_token
+
+    stale = asyncio.run(expire())
+
+    async def run():
+        agg = Aggregator(cfg, token_dir=token_dir)
+        await agg.start()
+        try:
+            return sorted(t.name for t in agg.catalog.tools), dict(agg.catalog.failed)
+        finally:
+            await agg.stop()
+
+    tools, failed = asyncio.run(run())
+    assert not failed  # no browser, no AuthorizationRequiredError
+    assert "get_weather" in tools
+
+    async def stored() -> str:
+        auth = NonInteractiveOAuth(mcp_url=oauth_url, token_storage=token_store(token_dir))
+        return (await auth.token_storage_adapter.get_tokens()).access_token
+
+    # Really refreshed, not merely tolerated: a new token was persisted, so the
+    # next process starts from it rather than repeating the exchange.
+    assert asyncio.run(stored()) != stale
+
+
+def no_terminal(monkeypatch) -> None:
+    """Make the picker behave the way it does with stdin not a tty.
+
+    `EOFError` is questionary's real answer there — verified by hand against
+    `questionary.checkbox(...).ask() < /dev/null`. Raised directly rather than
+    driven through the real prompt because prompt_toolkit caches one global
+    output object: letting it render into pytest's capture binds it to that
+    test's buffer, and the *next* test to prompt writes into a closed file.
+    """
+    import questionary
+
+    def refuse(*args, **kwargs):
+        raise EOFError()
+
+    monkeypatch.setattr(questionary, "checkbox", refuse)
+
+
+def test_no_terminal_prints_the_commands_instead_of_crashing(
+    tmp_path, oauth_url, monkeypatch, capsys
+):
+    """Scenario: the wizard runs where there is no tty to draw a checkbox on.
+
+    A pipe, a provisioning script, CI. questionary raises a bare `EOFError`
+    there, which is the least useful thing a user can be handed — and worse
+    from `toolsieve-setup --apply`, where the migration has already succeeded
+    by the time the prompt is reached. Degrade to the commands themselves.
+    """
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
+    no_terminal(monkeypatch)
+
+    code = main([], config_path=cfg, token_dir=tmp_path / "oauth",
+                authorize=lambda s, **kw: pytest.fail("authorized without being asked"))
+
+    assert code == 0
+    assert "toolsieve-auth gated" in capsys.readouterr().out
+
+
+def test_bare_force_reauthorizes_an_already_authorized_server(tmp_path, oauth_url, monkeypatch):
+    """Scenario: `toolsieve-auth --force` with no server named.
+
+    Switching accounts on every server is the only reason to pass `--force`
+    without a name, and the servers it applies to are precisely the ones the
+    wizard otherwise filters out for being fine. Dropping the flag silently
+    left the user with "nothing to do" and no way to say what they meant.
+    """
+    import questionary
+
+    token_dir = tmp_path / "oauth"
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
+    seed_token(oauth_url, token_dir)
+    offered = {}
+
+    class FakePrompt:
+        def ask(self):
+            return ["gated"]
+
+    def fake_checkbox(message, choices, **kwargs):
+        offered["choices"] = list(choices)
+        return FakePrompt()
+
+    monkeypatch.setattr(questionary, "checkbox", fake_checkbox)
+    authorized = []
+
+    code = main(
+        ["--force"],
+        config_path=cfg,
+        token_dir=token_dir,
+        authorize=lambda server, **kw: authorized.append(server.name),
+    )
+
+    assert code == 0
+    assert offered["choices"] == ["gated"]  # offered despite being authorized
+    assert authorized == ["gated"]
+    # Cleared first, same as the named --force path: otherwise a re-auth keeps
+    # the old identity and the switch the user asked for never happens.
+    assert unauthorized_servers(cfg, token_dir) == ["gated"]
+
+
+def test_a_failed_sign_in_is_reported_and_does_not_stop_the_others(
+    tmp_path, oauth_url, monkeypatch, capsys
+):
+    """Scenario: one ticked server's sign-in fails.
+
+    Sign-ins fail for ordinary reasons — the callback port is taken, the
+    browser tab was closed, the provider 500s. Each is a sentence, not a
+    traceback, and each is that server's own problem: aborting the loop would
+    cost the servers after it in the list a sign-in they asked for.
+    """
+    import questionary
+
+    cfg = write_config(
+        tmp_path / "c.json", {"gated": {"url": oauth_url}, "other": {"url": oauth_url + "/x"}}
+    )
+    monkeypatch.setattr(
+        questionary, "checkbox", lambda *a, **k: type("P", (), {"ask": lambda s: ["gated", "other"]})()
+    )
+    attempted = []
+
+    def flaky(server, **kwargs):
+        attempted.append(server.name)
+        if server.name == "gated":
+            raise RuntimeError("callback port 8765 already in use")
+
+    code = main([], config_path=cfg, token_dir=tmp_path / "oauth", authorize=flaky)
+    captured = capsys.readouterr()
+
+    assert attempted == ["gated", "other"]  # the failure did not abort the rest
+    assert code == 1  # ...but the command still reports that something failed
+    assert "callback port 8765 already in use" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_named_sign_in_failure_exits_nonzero(tmp_path, capsys):
+    """The same courtesy on the named path, which has no loop to protect."""
+    cfg = write_config(tmp_path / "c.json", {"down": {"url": dead_url()}})
+
+    def boom(server, **kwargs):
+        raise RuntimeError("the server hung up")
+
+    code = main(["down", "--force"], config_path=cfg, token_dir=tmp_path / "oauth", authorize=boom)
+
+    assert code == 1
+    assert "down was not authorized: the server hung up" in capsys.readouterr().err
 
 
 def dead_url() -> str:
@@ -457,15 +689,31 @@ def test_force_still_authorizes_an_unreachable_server(tmp_path):
     assert authorized == ["down"]
 
 
-def test_named_run_on_a_non_oauth_server_says_so(tmp_path, capsys):
-    """A stdio server has no OAuth to do — say that, don't imply a token exists."""
-    cfg = write_config(
-        tmp_path / "c.json", {"local": {"command": sys.executable, "args": [FAKE, "local"]}}
-    )
+@pytest.mark.parametrize("force", [[], ["--force"]])
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"command": sys.executable, "args": [FAKE, "local"]},
+        {"url": "https://example.test/mcp", "headers": {"Authorization": "Bearer static"}},
+    ],
+    ids=["stdio", "has-headers"],
+)
+def test_a_server_that_does_not_use_oauth_says_so_even_under_force(
+    tmp_path, capsys, entry, force
+):
+    """A stdio server has no OAuth to do — say that, don't imply a token exists.
+
+    True under `--force` too: whether a server speaks OAuth at all is read
+    from the config, not decided by a probe, so there is no verdict for
+    `--force` to override. Skipping the check with it got as far as
+    "This transport does not support auth" — a stdio transport being handed
+    an OAuth provider — before telling the user anything.
+    """
+    cfg = write_config(tmp_path / "c.json", {"srv": entry})
     authorized = []
 
     code = main(
-        ["local"],
+        ["srv", *force],
         config_path=cfg,
         token_dir=tmp_path / "oauth",
         authorize=lambda server, **kw: authorized.append(server.name),
@@ -474,6 +722,49 @@ def test_named_run_on_a_non_oauth_server_says_so(tmp_path, capsys):
     assert code == 0
     assert authorized == []
     assert "does not use OAuth" in capsys.readouterr().out
+
+
+def test_an_unset_url_variable_is_a_message_not_a_traceback(tmp_path, capsys):
+    """An unset `${VAR}` reaches this command from deeper than the config load.
+
+    `load_config` accepts the raw template; only `expand_env` — reached from
+    inside `--force`'s token clearing and from the sign-in itself — discovers
+    the variable is missing. Wrapping just the load left that as a traceback.
+    """
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": "${TS_UNSET_IN_THIS_TEST}"}})
+
+    code = main(["gated", "--force"], config_path=cfg, token_dir=tmp_path / "oauth",
+                authorize=lambda s, **kw: None)
+
+    assert code == 1
+    assert "TS_UNSET_IN_THIS_TEST" in capsys.readouterr().err
+
+
+def test_the_refusal_does_not_print_a_library_traceback(tmp_path, oauth_url, capfd):
+    """An unauthorized server is one line of ours, not a stack trace of theirs.
+
+    `NonInteractiveOAuth`'s refusal travels out through the mcp SDK's
+    `logger.exception("OAuth flow error")`, which dumped a full traceback
+    directly above toolsieve's own "run `toolsieve-auth gated`" — at every
+    startup, and again on every reload. Only that record is dropped, so a
+    genuine OAuth failure still logs.
+    """
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
+
+    async def run():
+        agg = Aggregator(cfg, token_dir=tmp_path / "oauth")
+        await agg.start()
+        try:
+            return dict(agg.catalog.failed)
+        finally:
+            await agg.stop()
+
+    failed = asyncio.run(run())
+    captured = capfd.readouterr()
+
+    assert "toolsieve-auth gated" in failed["gated"]  # still diagnosed
+    assert "OAuth flow error" not in captured.err + captured.out
+    assert "AuthorizationRequiredError" not in captured.err + captured.out
 
 
 def test_wizard_names_the_servers_that_did_not_answer(tmp_path, oauth_url, monkeypatch, capsys):

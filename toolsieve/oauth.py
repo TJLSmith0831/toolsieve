@@ -8,6 +8,7 @@ allowed to run.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastmcp.client.auth.oauth import OAuth
@@ -84,6 +85,16 @@ def find_auth_error(exc: BaseException) -> AuthorizationRequiredError | None:
         queue.extend(getattr(current, "exceptions", []))
         queue.extend([current.__cause__, current.__context__])
     return None
+
+
+# The refusal below travels out through `logger.exception("OAuth flow error")`
+# in the mcp SDK's auth flow, so every unauthorized server prints a full
+# traceback directly above toolsieve's own one-line "run toolsieve-auth X" —
+# at every startup, and again on every reload. Drop that one record; a genuine
+# OAuth failure still logs, because only our own exception is matched.
+logging.getLogger("mcp.client.auth.oauth2").addFilter(
+    lambda record: find_auth_error((record.exc_info or (None, None))[1]) is None
+)
 
 
 class NonInteractiveOAuth(OAuth):
