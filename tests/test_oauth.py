@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import socket
 import stat
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -22,6 +20,7 @@ from mcp.shared.auth import OAuthToken
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from conftest import FAKE, free_port  # noqa: E402
 from fake_server import SEEDED_TOKEN  # noqa: E402
 from toolsieve.aggregator import Aggregator  # noqa: E402
 from toolsieve.auth_cli import (  # noqa: E402
@@ -37,46 +36,13 @@ from toolsieve.oauth import (  # noqa: E402
     token_store,
 )
 
-FAKE = str(Path(__file__).resolve().parent / "fake_server.py")
-
-
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
 
 def write_config(path: Path, servers: dict) -> Path:
     path.write_text(json.dumps({"mcpServers": servers}))
     return path
 
 
-@pytest.fixture(scope="module")
-def oauth_url():
-    """A real OAuth-gated MCP server on localhost for the module.
-
-    Real 401 + WWW-Authenticate, real PRM/ASM discovery, real DCR — the spec
-    flow D6 relies on, with no network egress.
-    """
-    port = free_port()
-    proc = subprocess.Popen([sys.executable, FAKE, "gated", "--oauth", str(port)])
-    deadline = time.monotonic() + 30
-    while time.monotonic() < deadline:
-        if proc.poll() is not None:
-            raise RuntimeError(f"fake oauth server exited early with {proc.returncode}")
-        with socket.socket() as probe:
-            probe.settimeout(0.2)
-            if probe.connect_ex(("127.0.0.1", port)) == 0:
-                break
-        time.sleep(0.1)
-    else:
-        proc.kill()
-        raise RuntimeError("fake oauth server never came up")
-    try:
-        yield f"http://127.0.0.1:{port}/mcp"
-    finally:
-        proc.terminate()
-        proc.wait(timeout=10)
+# oauth_url fixture lives in conftest.py — shared with test_setup_flows.py.
 
 # --- token storage (task 2.1, D3 as amended, D17) ------------------------------
 
