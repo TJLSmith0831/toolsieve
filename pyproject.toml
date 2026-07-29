@@ -5,6 +5,17 @@ description = "Semantic tool routing for MCP: aggregate your downstream MCP serv
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
+keywords = ["mcp", "model-context-protocol", "llm", "agents", "tools", "routing", "embeddings"]
+# No license classifier: PEP 639 `license = "MIT"` above is the SPDX
+# expression, and metadata 2.4 does not allow both.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "fastmcp>=2.0",
     # fastembed brings numpy + onnxruntime; cosine top-k is done directly (D9 amended)
@@ -13,11 +24,21 @@ dependencies = [
     # hand-edited config keeps its comments after --apply. Runtime, not dev-only:
     # `uvx toolsieve-setup --client codex --apply` has no dev group (D12).
     "tomlkit>=0.13",
+    # Checkbox multi-select for the `toolsieve-auth` wizard (D12). Runtime, not
+    # dev-only: the wizard is what `uvx toolsieve-auth` exists to run.
+    "questionary>=2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/TJLSmith0831/toolsieve"
+Repository = "https://github.com/TJLSmith0831/toolsieve"
+Issues = "https://github.com/TJLSmith0831/toolsieve/issues"
+Changelog = "https://github.com/TJLSmith0831/toolsieve/blob/main/CHANGELOG.md"
 
 [project.scripts]
 toolsieve = "toolsieve.server:main"
 toolsieve-setup = "toolsieve.setup:main"
+toolsieve-auth = "toolsieve.auth_cli:main"
 
 [build-system]
 requires = ["hatchling"]

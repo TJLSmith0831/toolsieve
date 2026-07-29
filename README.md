@@ -1,4 +1,4 @@
-![toolsieve banner](assets/toolsieve-banner.png)
+![toolsieve banner](https://raw.githubusercontent.com/TJLSmith0831/toolsieve/main/assets/toolsieve-banner.png)
 
 # toolsieve
 
@@ -8,7 +8,7 @@
 It aggregates every tool they publish, then exposes exactly **three** tools to
 your client — and tells you how many tokens that saved.
 
-![toolsieve running in Claude Code](assets/demo.gif)
+![toolsieve running in Claude Code](https://raw.githubusercontent.com/TJLSmith0831/toolsieve/main/assets/demo.gif)
 
 *Claude Code (Sonnet) against 4 real MCP servers — 15 tools aggregated, 3 exposed.
 It routes "search my notes" and "read library docs" to the right tools, calls the
@@ -112,7 +112,7 @@ at once, which is the whole claim in one bar chart.
 table.)*
 
 Full per-size table, difficulty breakdown, methodology, and how to reproduce:
-**[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**.
+**[`benchmarks/RESULTS.md`](https://github.com/TJLSmith0831/toolsieve/blob/main/benchmarks/RESULTS.md)**.
 
 ## How it works
 
@@ -177,9 +177,10 @@ uvx toolsieve-setup --verify                          # confirm the catalog is n
 Nothing is written without `--apply`. Every file the script edits is backed
 up first (`*.toolsieve-bak` for the client config, `*.json.bak` for an
 existing toolsieve config), and servers it doesn't recognize are left
-untouched. HTTP servers with no auth headers are flagged with `!` rather than
-silently migrated, since that's either an open server or one whose token
-lives in the client via OAuth — a case toolsieve can't resolve for you (see
+untouched. HTTP servers with no auth headers are flagged with `!`, since
+that's either an open server or one that authenticates with OAuth — at the
+end of `--apply`, toolsieve asks each flagged server which it is and offers
+to sign you in to the ones that need it (see
 [Authenticating a remote server](#authenticating-a-remote-server)).
 
 Or configure it by hand:
@@ -224,11 +225,44 @@ toolsieve will not substitute an empty string and fire off an unauthenticated
 request, and your other servers are unaffected. **Keep tokens in your shell
 profile or secret manager, not in this file.**
 
-**OAuth is not supported.** If your client authenticated a server through an
-OAuth flow, that token lives in the client's own credential store and toolsieve
-can't reuse it — you need a bearer token or API key from that service instead.
-`toolsieve-setup` flags such entries with a `!` rather than silently migrating
-them into something that 401s on every call.
+**OAuth servers need no configuration at all.** Servers like Linear, Supabase,
+Vercel and Railway hand out no static token — they authenticate through a
+browser. Give them a `url` and nothing else:
+
+```json
+"linear": { "url": "https://mcp.linear.app/mcp" }
+```
+
+Then sign in once:
+
+```bash
+toolsieve-auth
+```
+
+That lists the servers currently refusing you, opens a browser for the ones
+you tick, and stores the result under `~/.toolsieve/oauth/` (owner-only, mode
+`0700`). Pass a name — `toolsieve-auth linear` — to go straight to one, and
+`--force` to re-authorize a server that already works, e.g. to switch
+accounts.
+
+There is nothing to declare in the config because there is nothing to guess:
+an unauthenticated request to a server that needs OAuth comes back `401` with
+a `WWW-Authenticate` header, which is the discovery mechanism the MCP
+specification defines. toolsieve follows it. A server that is genuinely open
+never sends one, so it just connects.
+
+After that it stays signed in on its own — the stored refresh token is used
+silently, including across restarts. If it is ever revoked, that one server
+fails with a message naming the fix while the rest keep working, and
+`toolsieve-auth <name>` puts it back — the running server picks the new token
+up within a second, with no restart. **The MCP server process never opens a
+browser**: it has no terminal to show one on, so signing in is always
+something you do deliberately, from your shell.
+
+Running on a headless box? The redirect can only return to `localhost` on the
+machine running the command, so `toolsieve-auth` prints the exact
+`ssh -L 8765:localhost:8765 …` line to forward first, then completes normally
+in the browser on your own machine.
 
 ### Run
 
@@ -354,8 +388,9 @@ uv run python benchmarks/render_results.py
 ## Changelog
 
 Releases follow [Semantic Versioning](https://semver.org/). See
-[CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+[CHANGELOG.md](https://github.com/TJLSmith0831/toolsieve/blob/main/CHANGELOG.md)
+for what changed in each release.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/TJLSmith0831/toolsieve/blob/main/LICENSE)

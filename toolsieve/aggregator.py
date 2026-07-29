@@ -24,11 +24,27 @@ from fastmcp.client.transports import (
 )
 
 from .config import ConfigError, ServerConfig, expand_env, load_config, load_dotenv_file
+from .oauth import (
+    PUBLIC_CLIENT_METADATA,
+    NonInteractiveOAuth,
+    find_auth_error,
+    token_store,
+)
 
 log = logging.getLogger("toolsieve")
 
 RELOAD_POLL_SECONDS = 1.0
 HTTP_RETRY_SECONDS = 0.5
+
+
+def _failure_reason(server: ServerConfig, exc: BaseException) -> str:
+    """Why a server is unavailable, as the user will read it (D9)."""
+    if find_auth_error(exc) is not None:
+        return (
+            f"needs authorization — run `toolsieve-auth {server.name}` to sign in. "
+            "It reconnects on its own afterwards, with no restart."
+        )
+    return str(exc)
 
 
 @dataclass(frozen=True)
@@ -72,12 +88,14 @@ class Aggregator:
     half-built catalog (design.md, Risks).
     """
 
-    def __init__(self, config_path: str | Path) -> None:
+    def __init__(self, config_path: str | Path, token_dir: str | Path | None = None) -> None:
         self.config_path = Path(config_path)
         # Same directory as the active config — covers both the repo-local dev
         # config and ~/.toolsieve/config.json for plugin installs (GH #6).
         self._dotenv_path = self.config_path.parent / ".env"
         self._env_overrides: dict[str, str] = {}
+        self._token_dir = token_dir
+        self._token_store: Any = None
         self.catalog = Catalog(tools=[], clients={}, failed={})
         self._stack: AsyncExitStack | None = None
         self._on_reload: list[Any] = []
@@ -139,8 +157,9 @@ class Aggregator:
             try:
                 client, published = await self._connect_and_list(stack, server)
             except Exception as exc:  # noqa: BLE001 — isolation is the point (D13)
-                log.warning("server %r unavailable, skipping its tools: %s", server.name, exc)
-                failed[server.name] = str(exc)
+                reason = _failure_reason(server, exc)
+                log.warning("server %r unavailable, skipping its tools: %s", server.name, reason)
+                failed[server.name] = reason
                 continue
 
             clients[server.name] = client
@@ -203,9 +222,39 @@ class Aggregator:
             cwd=server.cwd,
         )
 
+    def _auth_for(self, server: ServerConfig) -> NonInteractiveOAuth | None:
+        """OAuth for a remote server that was given no credential of its own (D6).
+
+        Configured `headers` mean the user supplied a token — use it and stay
+        out of the way. Their absence is the ambiguous case the MCP spec
+        resolves for us: attach the provider and let the server's own 401
+        decide. An open server never 401s, so this costs it nothing.
+        """
+        if not server.is_http or server.headers:
+            return None
+        if self._token_store is None:
+            # Built on first need, so a stdio-only setup never grows a token
+            # directory it has no use for.
+            self._token_store = token_store(self._token_dir)
+        url = expand_env(
+            server.url or "", server=server.name, where="'url'", overrides=self._env_overrides
+        )
+        return NonInteractiveOAuth(
+            mcp_url=url,
+            token_storage=self._token_store,
+            # Same name `toolsieve-auth` registers under. This connection fails
+            # before any browser opens, but it registers a client first and
+            # persists it — and the sign-in afterwards reuses that registration
+            # whenever the provider accepts a different loopback port, which
+            # RFC 8252 tells it to. Without this, the consent screen the user
+            # is asked to trust reads "FastMCP Client".
+            client_name="toolsieve",
+            additional_client_metadata=PUBLIC_CLIENT_METADATA,
+        )
+
     async def _connect(self, stack: AsyncExitStack, server: ServerConfig) -> Client:
         transport = self._transport(server, self._env_overrides)
-        return await stack.enter_async_context(Client(transport))
+        return await stack.enter_async_context(Client(transport, auth=self._auth_for(server)))
 
     async def _connect_and_list(
         self, stack: AsyncExitStack, server: ServerConfig
@@ -221,14 +270,42 @@ class Aggregator:
             client = await self._connect(stack, server)
             return client, await client.list_tools()
         except Exception as exc:  # noqa: BLE001 — decide by transport, then re-raise
-            # A ConfigError here is an unset ${VAR} — deterministic, so retrying
-            # only delays a failure this server is going to get either way.
-            if not server.is_http or isinstance(exc, ConfigError):
+            # A ConfigError here is an unset ${VAR}, and a missing authorization
+            # is a stored token that isn't there — both deterministic, so
+            # retrying only delays a failure this server is going to get either
+            # way. The auth error arrives wrapped in an anyio group, so it takes
+            # find_auth_error to see it; a bare isinstance silently misses and
+            # costs a second full round of OAuth discovery every startup.
+            if (
+                not server.is_http
+                or isinstance(exc, ConfigError)
+                or find_auth_error(exc) is not None
+            ):
                 raise
             log.info("server %r did not answer (%s), retrying once", server.name, exc)
             await asyncio.sleep(HTTP_RETRY_SECONDS)
             client = await self._connect(stack, server)
             return client, await client.list_tools()
+
+    async def connect_once(self, server: ServerConfig) -> BaseException | None:
+        """Try one server in isolation; return what it failed with, or None.
+
+        `toolsieve-auth` needs to know which servers are actually unauthorized
+        rather than merely credential-free, and the only honest answer comes
+        from the server itself. Going through `_connect` means the CLI asks
+        exactly the question the live aggregator would ask, instead of a
+        lookalike that can drift from it.
+        """
+        # One-shot, so read `.env` now: unlike `_aggregate` there is no earlier
+        # pass to have populated it, and a ${VAR} url must still resolve.
+        self._env_overrides = load_dotenv_file(self._dotenv_path)
+        try:
+            async with AsyncExitStack() as stack:
+                client = await self._connect(stack, server)
+                await client.list_tools()
+        except Exception as exc:  # noqa: BLE001 — the caller classifies it
+            return exc
+        return None
 
     @staticmethod
     async def _close(stack: AsyncExitStack | None) -> None:
