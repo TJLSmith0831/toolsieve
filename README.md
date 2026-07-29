@@ -1,4 +1,4 @@
-![toolsieve banner](assets/toolsieve-banner.png)
+![toolsieve banner](https://raw.githubusercontent.com/TJLSmith0831/toolsieve/main/assets/toolsieve-banner.png)
 
 # toolsieve
 
@@ -8,7 +8,7 @@
 It aggregates every tool they publish, then exposes exactly **three** tools to
 your client — and tells you how many tokens that saved.
 
-![toolsieve running in Claude Code](assets/demo.gif)
+![toolsieve running in Claude Code](https://raw.githubusercontent.com/TJLSmith0831/toolsieve/main/assets/demo.gif)
 
 *Claude Code (Sonnet) against 4 real MCP servers — 15 tools aggregated, 3 exposed.
 It routes "search my notes" and "read library docs" to the right tools, calls the
@@ -112,7 +112,7 @@ at once, which is the whole claim in one bar chart.
 table.)*
 
 Full per-size table, difficulty breakdown, methodology, and how to reproduce:
-**[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)**.
+**[`benchmarks/RESULTS.md`](https://github.com/TJLSmith0831/toolsieve/blob/main/benchmarks/RESULTS.md)**.
 
 ## How it works
 
@@ -388,8 +388,9 @@ uv run python benchmarks/render_results.py
 ## Changelog
 
 Releases follow [Semantic Versioning](https://semver.org/). See
-[CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+[CHANGELOG.md](https://github.com/TJLSmith0831/toolsieve/blob/main/CHANGELOG.md)
+for what changed in each release.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/TJLSmith0831/toolsieve/blob/main/LICENSE)
