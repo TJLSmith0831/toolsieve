@@ -242,6 +242,13 @@ class Aggregator:
         return NonInteractiveOAuth(
             mcp_url=url,
             token_storage=self._token_store,
+            # Same name `toolsieve-auth` registers under. This connection fails
+            # before any browser opens, but it registers a client first and
+            # persists it — and the sign-in afterwards reuses that registration
+            # whenever the provider accepts a different loopback port, which
+            # RFC 8252 tells it to. Without this, the consent screen the user
+            # is asked to trust reads "FastMCP Client".
+            client_name="toolsieve",
             additional_client_metadata=PUBLIC_CLIENT_METADATA,
         )
 
