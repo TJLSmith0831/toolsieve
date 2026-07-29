@@ -25,6 +25,40 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def browser_stand_in(monkeypatch) -> None:
+    """Replace `webbrowser.open` with an HTTP client that follows the redirect.
+
+    Every test that reaches the real interactive `OAuth` MUST call this.
+    Without it the flow launches a real browser window on the developer's
+    machine, and on a headless box (CI) nothing ever hits the callback, so
+    the test blocks for fastmcp's full 300s `callback_timeout` before
+    failing. Learned the hard way: a suite that was green locally hung for
+    5m49s and failed on ubuntu-latest for exactly this reason.
+
+    Only the human at the browser is stood in for — the discovery,
+    registration, redirect and token exchange are all still real.
+    """
+    import threading
+
+    import httpx
+
+    def open_in_background(url: str) -> bool:
+        def visit():
+            # The callback server is only started after this returns, so wait
+            # for it rather than racing it.
+            for _ in range(100):
+                try:
+                    httpx.get(url, follow_redirects=True, timeout=5)
+                    return
+                except httpx.HTTPError:
+                    time.sleep(0.1)
+
+        threading.Thread(target=visit, daemon=True).start()
+        return True
+
+    monkeypatch.setattr("webbrowser.open", open_in_background)
+
+
 @pytest.fixture(scope="module")
 def oauth_url():
     """A real OAuth-gated MCP server on localhost for the module.

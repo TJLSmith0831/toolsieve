@@ -26,7 +26,7 @@ from toolsieve import setup as ts_setup
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fake_server import SEEDED_TOKEN  # noqa: E402
+from conftest import browser_stand_in, free_port  # noqa: E402
 
 FAKE = str(Path(__file__).resolve().parent / "fake_server.py")
 
@@ -348,6 +348,7 @@ def test_full_new_user_journey(monkeypatch, fake_home, oauth_url, capfd):
     # out since questionary needs a TTY; authorize_server is called directly
     # below instead, same as the manual "sign in later" path.
     monkeypatch.setattr(module, "run_auth_wizard", lambda names: None)
+    browser_stand_in(monkeypatch)
     write_client_json(
         target_for("claude-code"),
         {
@@ -365,7 +366,11 @@ def test_full_new_user_journey(monkeypatch, fake_home, oauth_url, capfd):
     from toolsieve.config import load_config
 
     server = next(s for s in load_config(module.TOOLSIEVE_CONFIG) if s.name == "gated")
-    authorize_server(server, token_dir=module.TOOLSIEVE_CONFIG.parent / "oauth")
+    # A free port, not the default fixed CALLBACK_PORT — a test must not
+    # depend on 8765 being free on whatever machine runs it.
+    authorize_server(
+        server, token_dir=module.TOOLSIEVE_CONFIG.parent / "oauth", port=free_port()
+    )
 
     assert asyncio_run(module._verify()) == 0
     out = capfd.readouterr().out

@@ -11,7 +11,6 @@ import asyncio
 import json
 import stat
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -20,7 +19,7 @@ from mcp.shared.auth import OAuthToken
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from conftest import FAKE, free_port  # noqa: E402
+from conftest import FAKE, browser_stand_in, free_port  # noqa: E402
 from fake_server import SEEDED_TOKEN  # noqa: E402
 from toolsieve.aggregator import Aggregator  # noqa: E402
 from toolsieve.auth_cli import (  # noqa: E402
@@ -359,28 +358,9 @@ def test_full_authorization_round_trip_persists_a_usable_token(tmp_path, oauth_u
     Only the human at the browser is stood in for — by an HTTP client that
     follows the redirect the way a browser would.
     """
-    import threading
-
-    import httpx
-
     port = free_port()
     token_dir = tmp_path / "oauth"
-
-    def open_in_background(url: str) -> bool:
-        def visit():
-            # The callback server is only started after this returns, so wait
-            # for it rather than racing it.
-            for _ in range(100):
-                try:
-                    httpx.get(url, follow_redirects=True, timeout=5)
-                    return
-                except httpx.HTTPError:
-                    time.sleep(0.1)
-
-        threading.Thread(target=visit, daemon=True).start()
-        return True
-
-    monkeypatch.setattr("webbrowser.open", open_in_background)
+    browser_stand_in(monkeypatch)
 
     cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
     server = load_config(cfg)[0]
@@ -407,29 +387,13 @@ def test_headless_run_prints_the_port_forward_it_needs(tmp_path, oauth_url, monk
     headless box needs the tunnel spelled out — with the fixed port, which is
     the whole reason the port is fixed (D7).
     """
-    import threading
-
-    import httpx
-
     port = free_port()
 
     def no_browser_here(*a, **k):
         raise RuntimeError("no runnable browser")
 
-    def open_in_background(url: str) -> bool:
-        def visit():
-            for _ in range(100):
-                try:
-                    httpx.get(url, follow_redirects=True, timeout=5)
-                    return
-                except httpx.HTTPError:
-                    time.sleep(0.1)
-
-        threading.Thread(target=visit, daemon=True).start()
-        return True
-
     monkeypatch.setattr("webbrowser.get", no_browser_here)
-    monkeypatch.setattr("webbrowser.open", open_in_background)
+    browser_stand_in(monkeypatch)
 
     cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
     authorize_server(load_config(cfg)[0], token_dir=tmp_path / "oauth", port=port)
