@@ -26,7 +26,6 @@ from fastmcp.client.transports import (
 from .config import ConfigError, ServerConfig, expand_env, load_config, load_dotenv_file
 from .oauth import (
     PUBLIC_CLIENT_METADATA,
-    AuthorizationRequiredError,
     NonInteractiveOAuth,
     find_auth_error,
     token_store,
@@ -267,8 +266,14 @@ class Aggregator:
             # A ConfigError here is an unset ${VAR}, and a missing authorization
             # is a stored token that isn't there — both deterministic, so
             # retrying only delays a failure this server is going to get either
-            # way.
-            if not server.is_http or isinstance(exc, ConfigError | AuthorizationRequiredError):
+            # way. The auth error arrives wrapped in an anyio group, so it takes
+            # find_auth_error to see it; a bare isinstance silently misses and
+            # costs a second full round of OAuth discovery every startup.
+            if (
+                not server.is_http
+                or isinstance(exc, ConfigError)
+                or find_auth_error(exc) is not None
+            ):
                 raise
             log.info("server %r did not answer (%s), retrying once", server.name, exc)
             await asyncio.sleep(HTTP_RETRY_SECONDS)

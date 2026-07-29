@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import stat
 import sys
 from pathlib import Path
@@ -402,6 +403,132 @@ def test_headless_run_prints_the_port_forward_it_needs(tmp_path, oauth_url, monk
     assert f"ssh -L {port}:localhost:{port}" in out
     # Guidance, not a dead end: with the tunnel up the flow still completes.
     assert "gated authorized." in out
+
+
+def dead_url() -> str:
+    """A url nothing is listening on — the "server is down" case.
+
+    free_port() binds and releases, so the port is known-closed rather than
+    merely unlikely to be in use.
+    """
+    return f"http://127.0.0.1:{free_port()}/mcp"
+
+
+def test_named_run_on_an_unreachable_server_does_not_claim_authorized(tmp_path, capsys):
+    """Scenario: named invocation on a server that is down.
+
+    Three states exist — authorized, refusing us, and not answering at all —
+    and only the server can tell them apart. Collapsing the third into the
+    first tells someone their auth is fine at the exact moment they are
+    debugging why it isn't, sending them off in the wrong direction. No
+    browser opens either: a sign-in is not known to be the missing piece.
+    """
+    cfg = write_config(tmp_path / "c.json", {"down": {"url": dead_url()}})
+    authorized = []
+
+    code = main(
+        ["down"],
+        config_path=cfg,
+        token_dir=tmp_path / "oauth",
+        authorize=lambda server, **kw: authorized.append(server.name),
+    )
+    captured = capsys.readouterr()
+
+    assert authorized == []
+    assert code == 1
+    assert "already authorized" not in captured.out
+    assert "did not answer" in captured.err
+    assert "--force" in captured.err  # the escape hatch, named where it is needed
+
+
+def test_force_still_authorizes_an_unreachable_server(tmp_path):
+    """`--force` stays the escape hatch: the user overrides the diagnosis."""
+    cfg = write_config(tmp_path / "c.json", {"down": {"url": dead_url()}})
+    authorized = []
+
+    code = main(
+        ["down", "--force"],
+        config_path=cfg,
+        token_dir=tmp_path / "oauth",
+        authorize=lambda server, **kw: authorized.append(server.name),
+    )
+
+    assert code == 0
+    assert authorized == ["down"]
+
+
+def test_named_run_on_a_non_oauth_server_says_so(tmp_path, capsys):
+    """A stdio server has no OAuth to do — say that, don't imply a token exists."""
+    cfg = write_config(
+        tmp_path / "c.json", {"local": {"command": sys.executable, "args": [FAKE, "local"]}}
+    )
+    authorized = []
+
+    code = main(
+        ["local"],
+        config_path=cfg,
+        token_dir=tmp_path / "oauth",
+        authorize=lambda server, **kw: authorized.append(server.name),
+    )
+
+    assert code == 0
+    assert authorized == []
+    assert "does not use OAuth" in capsys.readouterr().out
+
+
+def test_wizard_names_the_servers_that_did_not_answer(tmp_path, oauth_url, monkeypatch, capsys):
+    """Scenario: wizard with one gated server and one that is down.
+
+    Same root cause as the named case: an unreachable server must not drop
+    out of the list silently, leaving the user to wonder why it was never
+    offered. It is still not *offered* — we don't know it needs a sign-in —
+    but it is named.
+    """
+    import questionary
+
+    cfg = write_config(
+        tmp_path / "c.json", {"gated": {"url": oauth_url}, "down": {"url": dead_url()}}
+    )
+    offered = {}
+
+    class FakePrompt:
+        def ask(self):
+            return ["gated"]
+
+    def fake_checkbox(message, choices, **kwargs):
+        offered["choices"] = list(choices)
+        return FakePrompt()
+
+    monkeypatch.setattr(questionary, "checkbox", fake_checkbox)
+
+    code = main([], config_path=cfg, token_dir=tmp_path / "oauth", authorize=lambda s, **kw: None)
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert offered["choices"] == ["gated"]  # only the one actually refusing us
+    assert "down" in out  # but the unreachable one is accounted for
+
+
+def test_unauthorized_server_is_not_retried(tmp_path, oauth_url, caplog):
+    """Scenario: an unauthorized server fails fast, without a pointless retry.
+
+    The auth error surfaces wrapped in an anyio group, so a bare isinstance
+    check misses it and the connection is retried — a second full round of
+    OAuth discovery against the downstream server, on every startup and
+    every reload, for a failure that is deterministic by definition.
+    `find_auth_error` exists for exactly this wrapping.
+    """
+    cfg = write_config(tmp_path / "c.json", {"gated": {"url": oauth_url}})
+
+    async def run():
+        agg = Aggregator(cfg, token_dir=tmp_path / "oauth")
+        await agg.start()
+        await agg.stop()
+
+    with caplog.at_level(logging.INFO, logger="toolsieve"):
+        asyncio.run(run())
+
+    assert "retrying once" not in caplog.text
 
 
 def test_a_missing_config_is_a_message_not_a_traceback(tmp_path, capsys):

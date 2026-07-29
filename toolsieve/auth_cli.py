@@ -31,26 +31,54 @@ def _candidates(config_path: str | Path) -> list[ServerConfig]:
     return [s for s in load_config(config_path) if s.is_http and not s.headers]
 
 
+# The three answers a server can give. "Silent" is not "fine": a server that
+# never answered tells us nothing about whether it would want a sign-in, and
+# reporting that as OK misleads whoever is already debugging it.
+OK = "ok"
+NEEDS_AUTH = "needs_auth"
+SILENT = "silent"
+
+
+def server_states(
+    config_path: str | Path,
+    token_dir: str | Path | None = None,
+    only: str | None = None,
+) -> dict[str, tuple[str, BaseException | None]]:
+    """Ask each candidate server how it actually answers, right now.
+
+    Headerless is not the same as unauthorized — plenty of remote servers are
+    simply open — and neither is the same as unreachable. Only the server can
+    tell the three apart, so ask it, and keep the answers distinct all the way
+    out to the user (D14). `only` narrows the probe to one server, so naming a
+    server does not cost connections to every other one.
+    """
+    agg = Aggregator(config_path, token_dir=token_dir)
+    candidates = [s for s in _candidates(config_path) if only is None or s.name == only]
+
+    async def go() -> dict[str, tuple[str, BaseException | None]]:
+        states = {}
+        for server in candidates:
+            exc = await agg.connect_once(server)
+            if exc is None:
+                states[server.name] = (OK, None)
+            elif find_auth_error(exc) is not None:
+                states[server.name] = (NEEDS_AUTH, exc)
+            else:
+                states[server.name] = (SILENT, exc)
+        return states
+
+    return asyncio.run(go())
+
+
 def unauthorized_servers(
     config_path: str | Path, token_dir: str | Path | None = None
 ) -> list[str]:
-    """Names of the configured servers that are actually refusing us right now.
-
-    Headerless is not the same as unauthorized — plenty of remote servers are
-    simply open. Only the server can tell the difference, so ask it, and offer
-    the user exactly the ones that answered "no" (D14).
-    """
-    agg = Aggregator(config_path, token_dir=token_dir)
-
-    async def go() -> list[str]:
-        names = []
-        for server in _candidates(config_path):
-            exc = await agg.connect_once(server)
-            if exc is not None and find_auth_error(exc) is not None:
-                names.append(server.name)
-        return names
-
-    return asyncio.run(go())
+    """Names of the configured servers that are actually refusing us right now."""
+    return [
+        name
+        for name, (state, _) in server_states(config_path, token_dir).items()
+        if state == NEEDS_AUTH
+    ]
 
 
 def server_url(server: ServerConfig, env_overrides: dict[str, str] | None = None) -> str:
@@ -159,9 +187,21 @@ def _wizard(path: Path, token_dir: str | Path | None, authorize) -> int:
     import questionary
 
     env_overrides = env_for(path)
-    names = unauthorized_servers(path, token_dir)
+    states = server_states(path, token_dir)
+    names = [n for n, (state, _) in states.items() if state == NEEDS_AUTH]
+
+    # Named, not offered: we don't know that signing in is what they want,
+    # but dropping them from the list without a word leaves the user
+    # wondering why the server they came here for was never mentioned.
+    silent = [(n, exc) for n, (state, exc) in states.items() if state == SILENT]
+    if silent:
+        print("These servers did not answer, so whether they need a sign-in is unknown:")
+        for name, exc in silent:
+            print(f"  - {name}: {exc}")
+        print()
+
     if not names:
-        print("Every configured server is already authorized — nothing to do.")
+        print("No configured server is asking for a sign-in right now.")
         return 0
 
     by_name = {s.name: s for s in load_config(path)}
@@ -220,10 +260,30 @@ def main(
 
     env_overrides = env_for(path)
     if args.force:
+        # An explicit override: the user has already decided, so skip the
+        # diagnosis entirely — including for a server we could not reach.
         clear_tokens(server, token_dir, env_overrides)
-    elif args.server not in unauthorized_servers(path, token_dir):
-        print(f"{args.server} is already authorized — nothing to do.")
-        return 0
+    else:
+        state, exc = server_states(path, token_dir, only=args.server).get(
+            args.server, (None, None)
+        )
+        if state is None:
+            print(
+                f"{args.server} does not use OAuth — it is a local command, or it "
+                f"already carries auth headers. Nothing to sign in to."
+            )
+            return 0
+        if state == OK:
+            print(f"{args.server} is already authorized — nothing to do.")
+            return 0
+        if state == SILENT:
+            # Never "already authorized": this is exactly when someone is
+            # debugging, and a false all-clear sends them the wrong way.
+            print(f"{args.server} did not answer, so it is unknown whether it needs "
+                  f"a sign-in: {exc}", file=sys.stderr)
+            print("Fix the connection first, or re-run with --force to sign in anyway.",
+                  file=sys.stderr)
+            return 1
 
     authorize(server, token_dir=token_dir, env_overrides=env_overrides)
     return 0
