@@ -37,19 +37,23 @@ JSON_CLIENT_KEYS = [
     "claude-desktop",
     "cursor",
     "windsurf",
-    # vscode: exercises whatever shape targets() currently assumes
-    # (top-level "mcpServers" in ~/.vscode/mcp.json). Not verified against
-    # VS Code's actual current config format — that's changed across
-    # versions and nothing before this suite exercised this target at all.
-    # A green test here proves internal consistency, not that the shape is
-    # still correct; check VS Code's current docs before trusting it.
     "vscode",
+    "devin-cli",
+    "cursor-project",
+    "devin-cli-project",
 ]
 
 
 def isolate(monkeypatch, fake_home):
     """chdir alongside fake_home — required by every test that touches
     discover()/cmd_list()/cmd_setup() (see module docstring).
+
+    Into a *subdirectory* of fake_home, not fake_home itself: with cwd ==
+    HOME, every project-scoped target collides with its user-scoped sibling
+    (cursor vs cursor-project both land on ~/.cursor/mcp.json) and a
+    parametrized scenario can no longer tell which one it exercised. A real
+    project directory is not the user's home directory; the fixture matches.
+    test_same_path_targets_are_listed_once covers the collision deliberately.
 
     Also sets the real $HOME env var, not just the in-process ts_setup.HOME
     attribute: _verify() spawns `python -m toolsieve` as a subprocess and
@@ -58,7 +62,9 @@ def isolate(monkeypatch, fake_home):
     real machine's home instead of the fake one, missing whatever token a
     same-test authorize_server() call just stored.
     """
-    monkeypatch.chdir(fake_home)
+    project = fake_home / "project"
+    project.mkdir(exist_ok=True)
+    monkeypatch.chdir(project)
     monkeypatch.setenv("HOME", str(fake_home))
     return ts_setup
 
@@ -70,6 +76,40 @@ def write_client_json(target, servers: dict, extra: dict | None = None) -> None:
 
 def target_for(key: str):
     return next(t for t in ts_setup.targets() if t.key == key)
+
+
+# --- target paths that aren't obvious from the key ---------------------------
+
+
+def test_vscode_target_is_the_workspace_file_not_a_home_dotfile(monkeypatch, fake_home):
+    """VS Code documents .vscode/mcp.json relative to the open workspace.
+
+    The target used to point at ~/.vscode/mcp.json, which is neither that nor
+    VS Code's real user-profile location (that lives under its own app-data
+    dir, and its macOS/Linux path is not documented clearly enough to encode
+    here — workspace-only is the honest scope).
+    """
+    isolate(monkeypatch, fake_home)
+    assert target_for("vscode").path == Path.cwd() / ".vscode/mcp.json"
+
+
+def test_same_path_targets_are_listed_once(monkeypatch, fake_home):
+    """Scenario: a first-time user running toolsieve-setup from their home dir.
+
+    With cwd == HOME, `cursor` and `cursor-project` resolve to the same file.
+    discover() must yield it once. Listing it twice is not merely cosmetic:
+    cmd_setup does not bail when there is nothing left to move, so a second
+    --apply under the sibling key would reach shutil.copy2 and overwrite the
+    .toolsieve-bak from the first with already-migrated content, destroying
+    the only copy of the user's pre-toolsieve config.
+    """
+    monkeypatch.chdir(fake_home)
+    monkeypatch.setenv("HOME", str(fake_home))
+    write_client_json(target_for("cursor"), {"fs": {"command": "npx", "args": ["x"]}})
+
+    found = ts_setup.discover()
+
+    assert [t.path for t, _ in found] == [fake_home / ".cursor/mcp.json"]
 
 
 # --- classify(): the core routing decision, tested directly -------------------

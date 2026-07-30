@@ -6,9 +6,13 @@ description: Set up toolsieve in the user's coding agent — find their existing
 # toolsieve setup
 
 Configures toolsieve into whichever coding agent the user runs (Claude Code,
-Claude Desktop, Cursor, Windsurf, VS Code): it migrates that client's existing
-stdio `mcpServers` entries into toolsieve's own config, then registers toolsieve
-with the client in their place.
+Claude Desktop, Cursor, Devin Desktop/Windsurf, VS Code, Codex CLI, Devin CLI):
+it migrates that client's existing stdio `mcpServers` entries into toolsieve's
+own config, then registers toolsieve with the client in their place.
+
+Several clients keep both a user-level and a project-level config; `--list`
+shows those as separate keys (`cursor` vs `cursor-project`). Pick the one whose
+path matches where the user's servers actually are — don't assume user-level.
 
 The result: the agent loads three tools instead of every server's full catalog,
 and reaches the rest through `find_tools` / `call_tool`.

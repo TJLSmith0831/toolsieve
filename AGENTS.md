@@ -19,7 +19,7 @@ FastMCP.
 - `toolsieve/config.py` — `mcpServers`-shaped config + `.env` loading (GH #6)
 - `toolsieve/oauth.py` — token store + the browser-less `NonInteractiveOAuth` the server uses
 - `toolsieve/auth_cli.py` — the `toolsieve-auth` console script: the only place a browser opens
-- `toolsieve/setup.py` — the `toolsieve-setup` console script: migrates a client's existing MCP config (Claude Code/Desktop, Cursor, Windsurf, VS Code, Codex CLI) into toolsieve's, and `--verify` checks the result
+- `toolsieve/setup.py` — the `toolsieve-setup` console script: migrates a client's existing MCP config (Claude Code/Desktop, Cursor, Devin Desktop/Windsurf, VS Code, Codex CLI, Devin CLI) into toolsieve's, and `--verify` checks the result. Clients documenting a project-scoped config get a second `-project` target keyed off `Path.cwd()`
 - `tests/fake_server.py` — the real stdio/HTTP MCP servers the test suite runs against
 - `benchmarks/` — routing-accuracy benchmark (naive vs BM25 vs toolsieve); see `benchmarks/RESULTS.md`
 

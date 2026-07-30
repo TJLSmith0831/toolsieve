@@ -164,8 +164,11 @@ uv sync
 #### Migrate an existing client config
 
 Already have `mcpServers` configured in Claude Code, Claude Desktop, Cursor,
-Windsurf, VS Code, or Codex CLI? `toolsieve-setup` moves those entries behind
-toolsieve for you instead of hand-copying config:
+Devin Desktop (formerly Windsurf), VS Code, Codex CLI, or Devin CLI?
+`toolsieve-setup` moves those entries behind toolsieve for you instead of
+hand-copying config. Clients that support a project-scoped config get a
+separate `-project` key, so `--list` shows user-level and project-level
+configs as distinct targets:
 
 ```bash
 uvx toolsieve-setup --list                            # discover configs across every known client
