@@ -65,6 +65,32 @@ def test_cmd_setup_apply_writes_codex_toml(monkeypatch, tmp_path):
     assert "foo" in backup.read_text()
 
 
+def test_cmd_setup_apply_writes_project_codex_toml(monkeypatch, tmp_path):
+    """Codex reads .codex/config.toml per directory, closest to cwd winning.
+
+    chdir is mandatory here, unlike every other test in this file: load_module()
+    only patches HOME, and a cwd-relative target would otherwise resolve against
+    this repo's own working directory. Into a subdir of tmp_path so cwd != HOME
+    — same reason as test_setup_flows.isolate().
+    """
+    module = load_module(monkeypatch, tmp_path)
+    project = tmp_path / "project"
+    (project / ".codex").mkdir(parents=True)
+    monkeypatch.chdir(project)
+    codex_path = project / ".codex/config.toml"
+    codex_path.write_text('# project-local codex config\n[mcp_servers.foo]\ncommand = "uv"\n')
+
+    assert module.cmd_setup("codex-project", apply=True) == 0
+
+    written = codex_path.read_text()
+    assert "# project-local codex config" in written
+    data = tomllib.loads(written)
+    assert "foo" not in data["mcp_servers"]
+    assert data["mcp_servers"]["toolsieve"]["command"] == "uvx"
+    # The user-level ~/.codex/config.toml is a different file and stays untouched.
+    assert not (tmp_path / ".codex/config.toml").exists()
+
+
 def test_cmd_setup_dry_run_does_not_write_codex_toml(monkeypatch, tmp_path):
     module = load_module(monkeypatch, tmp_path)
     codex_path = tmp_path / ".codex/config.toml"

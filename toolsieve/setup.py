@@ -56,12 +56,32 @@ def targets() -> list[ClientTarget]:
             "Claude Desktop",
             HOME / "Library/Application Support/Claude/claude_desktop_config.json",
         ),
-        ClientTarget("cursor", "Cursor", HOME / ".cursor/mcp.json"),
-        ClientTarget("windsurf", "Windsurf", HOME / ".codeium/windsurf/mcp_config.json"),
-        ClientTarget("vscode", "VS Code", HOME / ".vscode/mcp.json"),
+        ClientTarget("cursor", "Cursor (user)", HOME / ".cursor/mcp.json"),
+        ClientTarget("cursor-project", "Cursor (this project)", Path.cwd() / ".cursor/mcp.json"),
+        # Cognition renamed the Windsurf editor to Devin Desktop (June 2026);
+        # the config path kept the old name for backward compatibility. Both
+        # names in the label so either one the user knows it by finds it.
         ClientTarget(
-            "codex", "Codex CLI", HOME / ".codex/config.toml",
+            "windsurf", "Devin Desktop / Windsurf", HOME / ".codeium/windsurf/mcp_config.json"
+        ),
+        # Workspace-scoped only: VS Code's user-profile mcp.json lives under its
+        # own app-data dir, whose macOS/Linux path it does not document plainly.
+        ClientTarget("vscode", "VS Code (this project)", Path.cwd() / ".vscode/mcp.json"),
+        ClientTarget(
+            "codex", "Codex CLI (user)", HOME / ".codex/config.toml",
             section=("mcp_servers",), servers_key=None, fmt="toml",
+        ),
+        ClientTarget(
+            "codex-project", "Codex CLI (this project)", Path.cwd() / ".codex/config.toml",
+            section=("mcp_servers",), servers_key=None, fmt="toml",
+        ),
+        # Devin CLI (cli.devin.ai) — a different product from Devin Desktop
+        # (the rebranded Windsurf editor, still on its ~/.codeium path above).
+        # Same mcpServers shape as Claude Desktop. Filename is mcp_config.json
+        # as of CLI v3000.3; older builds kept servers in config.json.
+        ClientTarget("devin-cli", "Devin CLI (user)", HOME / ".config/devin/mcp_config.json"),
+        ClientTarget(
+            "devin-cli-project", "Devin CLI (this project)", Path.cwd() / ".devin/mcp_config.json"
         ),
     ]
 
@@ -161,10 +181,17 @@ def toolsieve_entry() -> dict:
 
 
 def discover() -> list[tuple[ClientTarget, dict]]:
-    found = []
+    found, seen = [], set()
     for target in targets():
-        if not target.path.exists():
+        # A project-scoped target lands on the same file as its user-scoped
+        # sibling when cwd == HOME. Yielding both would let a second --apply
+        # under the other key overwrite the first one's .toolsieve-bak with
+        # already-migrated content — cmd_setup does not bail on an empty
+        # move. User-scoped targets are listed first, so they win.
+        resolved = target.path.resolve()
+        if not target.path.exists() or resolved in seen:
             continue
+        seen.add(resolved)
         servers = {k: v for k, v in servers_in(target).items() if k != "toolsieve"}
         found.append((target, servers))
     return found
