@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_context
+from fastmcp.tools import FunctionTool
 
 from .aggregator import Aggregator, Catalog, DownstreamError
 from .config import DEFAULT_CONFIG_PATH
@@ -77,10 +79,71 @@ async def find_tools(
     """
     router = _router()
     result = router.find(query, k=k, exclude=exclude)
+    if result.get("tool"):
+        result["tool"]["callable_as"] = await _promote(result["tool"])
     savings: Savings = _state["savings"]
     savings.record(result["savings"]["tokens_if_naive"], result["savings"]["tokens_actual"])
     _attach_config_error(result)
     return result
+
+
+_PROMOTED: set[str] = set()
+
+
+async def _promote(match: dict[str, Any]) -> str:
+    """Register a found tool so the client can call it without going through us (D23).
+
+    The measured gap against a client's own tool search is not the extra hop —
+    that costs ~33 tokens a run. It is that their search returns a *pointer* the
+    API expands into cached tool definitions (~99 tokens a call) while find_tools
+    returns the schema inline in the conversation (~808). MCP offers the same
+    mechanism: a server may change its own tool list, and clients that honour
+    `notifications/tools/list_changed` then hold the schema in their cached
+    definitions instead of re-reading it out of the transcript.
+
+    Namespaced because `create_issue` exists on more than one server.
+    """
+    exposed = f"{match['server']}__{match['name']}"
+    if exposed in _PROMOTED:
+        return exposed
+
+    server, tool_name = match["server"], match["name"]
+
+    async def run(**kwargs: Any) -> Any:
+        # No `ok`/`result` envelope: a promoted tool stands in for the real one,
+        # so it returns what the real one returns and lets a failure surface as
+        # an MCP tool error. `call_tool`'s envelope exists because a client that
+        # reached a tool through a generic proxy cannot otherwise tell a
+        # downstream error from a downstream result; here it can.
+        aggregator: Aggregator = _state["aggregator"]
+        return _unwrap(await aggregator.call(server, tool_name, kwargs))
+
+    # Built directly rather than via Tool.from_function, which infers the schema
+    # from the signature and rejects **kwargs. The schema here is the downstream
+    # server's own — passing it through unaltered is the point.
+    mcp.add_tool(
+        FunctionTool(
+            name=exposed,
+            description=match["description"],
+            parameters=match["input_schema"],
+            output_schema=match.get("output_schema"),
+            fn=run,
+        )
+    )
+    _PROMOTED.add(exposed)
+
+    # Adding the tool is not enough: a client re-reads its tool list only when
+    # told to, so without this the promotion is invisible to everyone who is not
+    # already polling — which is everyone. Best-effort: a client that never
+    # re-lists still has `tool` in the response and `call_tool` to reach it, so
+    # a failure here degrades to the old path rather than losing the call.
+    try:
+        await get_context().session.send_tool_list_changed()
+    except Exception as exc:  # no active session, or a client that cannot be told
+        log.info("could not announce %s: %s", exposed, exc)
+
+    log.info("promoted %s to a directly callable tool", exposed)
+    return exposed
 
 
 def _attach_config_error(result: dict[str, Any]) -> None:

@@ -55,6 +55,7 @@ class AggregatedTool:
     name: str
     description: str
     input_schema: dict[str, Any]
+    output_schema: dict[str, Any] | None = None
 
     @property
     def match_text(self) -> str:
@@ -178,6 +179,11 @@ class Aggregator:
                         name=tool.name,
                         description=description,
                         input_schema=tool.inputSchema or {},
+                        # Carried so a promoted tool (D23) can declare the same
+                        # output shape the real one does. Without it a structured
+                        # result is silently flattened to text — the D18 failure,
+                        # which passed every lower-level test the first time.
+                        output_schema=getattr(tool, "outputSchema", None),
                     )
                 )
 
