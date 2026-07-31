@@ -221,12 +221,13 @@ class Router:
             also.setdefault(t.server, []).append(t.name)
 
         # `servers` looks redundant — the same list is in this instance's MCP
-        # instructions and in every tool description. It was removed on that
-        # reasoning and the live A/B disagreed: without it, find_tools calls per
-        # task went from a flat [3,3,3] to [3,5,4], with input tokens and cost up
-        # with them. A roster answers "does this tool exist"; the server map
-        # answers "which server should I even be asking about", and the client
-        # evidently uses it. Kept on measurement, against the tidier argument.
+        # instructions and in every tool description, both cached. It was removed
+        # on that reasoning and the live A/B did not support the removal: median
+        # cost over three runs without it was $0.66 against $0.54 pooled over six
+        # runs with it. Weak evidence (n=3, overlapping ranges) but pointing one
+        # way, and the argument for removing it was purely tidiness. A roster
+        # answers "does this tool exist"; this answers "which server should I be
+        # asking about at all". Kept until something measures better.
         # ponytail: O(servers), ~150 tokens at 25 servers. Ceiling: a catalog
         # with hundreds of servers should send counts only for servers in the
         # roster, not all of them.
