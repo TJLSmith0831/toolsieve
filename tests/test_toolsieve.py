@@ -563,9 +563,10 @@ def test_roster_names_every_tool_so_absence_is_provable(router):
     listed = {name for names in result["also_available"].values() for name in names}
     assert listed == {"get_weather", "search_docs"}
     assert set(result["also_available"]) == {"docs"}  # grouped by owning server
-    # The server list is not repeated per response — it is in the instructions
-    # and every tool description, which the client caches once.
-    assert "servers" not in result
+    # The server map rides along too: the roster answers "does this tool exist",
+    # this answers "which server should I be asking about at all". Dropping it
+    # measurably cost round trips in the live A/B.
+    assert result["servers"] == {"docs": 2}
 
 
 def test_exact_name_query_returns_that_tools_schema(router):
@@ -676,7 +677,7 @@ def test_savings_receipt_counts_everything_it_shipped(router):
     """
     result = router.find("what is the weather", k=3)
     counted = {k: v for k, v in result.items() if k != "savings"}
-    assert set(counted) == {"tool", "alternatives", "also_available", "message"}
+    assert set(counted) == {"tool", "alternatives", "also_available", "servers", "message"}
     # chars/4, the same estimator the receipt uses — so this is exact, not fuzzy.
     assert result["savings"]["tokens_actual"] == len(json.dumps(counted)) // 4
 

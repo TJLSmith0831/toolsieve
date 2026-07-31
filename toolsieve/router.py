@@ -24,9 +24,12 @@ because its failures cost four calls, and a per-call number cannot see that.
   `also_available` must be able to fetch that schema in one hop, deterministic,
   not by hoping the ranker agrees with a choice it has already made.
 
-Net, priced at real schema sizes (154 tok/tool measured across live public MCP
-servers; 269 on the GitHub-heavy catalog the smoke test used), this resolves a
-query for 46-63% fewer tokens than the shape it replaces.
+Net: on the benchmark, priced at real schema sizes, this resolves a query for 1%
+fewer tokens at 154 tok/tool and 30% fewer at 269 than the shape it replaces —
+and the benchmark *understates* it, because every query in that set has a
+correct answer and the case that actually cost the most does not. Measured live
+against real GitHub and Context7 servers (n=6 against n=3, non-overlapping cost
+ranges): 27% fewer input tokens, 26% lower cost, 21% fewer turns.
 """
 
 from __future__ import annotations
@@ -217,15 +220,21 @@ class Router:
         for t, _ in roster:
             also.setdefault(t.server, []).append(t.name)
 
-        # No server map here on purpose: the server list is already in this
-        # instance's MCP instructions and in every tool description, which live
-        # in the cached system prompt. Repeating it per response measured ~150
-        # tokens a call on a 25-server catalog — paid every call, for something
-        # the client was told once for free.
+        # `servers` looks redundant — the same list is in this instance's MCP
+        # instructions and in every tool description. It was removed on that
+        # reasoning and the live A/B disagreed: without it, find_tools calls per
+        # task went from a flat [3,3,3] to [3,5,4], with input tokens and cost up
+        # with them. A roster answers "does this tool exist"; the server map
+        # answers "which server should I even be asking about", and the client
+        # evidently uses it. Kept on measurement, against the tidier argument.
+        # ponytail: O(servers), ~150 tokens at 25 servers. Ceiling: a catalog
+        # with hundreds of servers should send counts only for servers in the
+        # roster, not all of them.
         result: dict[str, Any] = {
             "tool": tool,
             "alternatives": alts,
             "also_available": also,
+            "servers": self._server_counts(),
         }
 
         if message:
@@ -264,6 +273,13 @@ class Router:
             "saved_pct": saved_pct(self.naive_tokens, actual),
         }
         return result
+
+    def _server_counts(self) -> dict[str, int]:
+        """Every server in the catalog, with its tool count. O(servers)."""
+        counts: dict[str, int] = {}
+        for tool in self.tools:
+            counts[tool.server] = counts.get(tool.server, 0) + 1
+        return counts
 
     def _empty_message(self, exclude: list[str] | None) -> str:
         if not self.tools:
