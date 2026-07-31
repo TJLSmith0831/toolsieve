@@ -109,17 +109,17 @@
         "paraphrase": 1.0
       },
       "tokens_if_naive": 11676,
-      "tokens_actual": 3537,
-      "tokens_per_call": 253,
+      "tokens_actual": 4615,
+      "tokens_per_call": 330,
       "expected_calls": 1.0,
-      "tokens_per_resolution": 253,
-      "break_even_lookups": 3.3,
-      "tokens_saved_pct": 69.7,
+      "tokens_per_resolution": 330,
+      "break_even_lookups": 2.5,
+      "tokens_saved_pct": 60.5,
       "schema_tokens": 1290,
       "schema_count": 14,
       "repriced": {
-        "live public MCP servers": 314,
-        "GitHub-heavy catalog": 430
+        "live public MCP servers": 392,
+        "GitHub-heavy catalog": 506
       },
       "seconds": 0.03
     },
@@ -217,19 +217,19 @@
         "paraphrase": 1.0
       },
       "tokens_if_naive": 76684,
-      "tokens_actual": 14115,
-      "tokens_per_call": 371,
+      "tokens_actual": 17065,
+      "tokens_per_call": 449,
       "expected_calls": 1.053,
-      "tokens_per_resolution": 391,
-      "break_even_lookups": 5.2,
-      "tokens_saved_pct": 81.6,
+      "tokens_per_resolution": 473,
+      "break_even_lookups": 4.3,
+      "tokens_saved_pct": 77.7,
       "schema_tokens": 3231,
       "schema_count": 38,
       "repriced": {
-        "live public MCP servers": 464,
-        "GitHub-heavy catalog": 585
+        "live public MCP servers": 545,
+        "GitHub-heavy catalog": 666
       },
-      "seconds": 0.08
+      "seconds": 0.07
     },
     {
       "catalog_size": 50,
@@ -325,17 +325,17 @@
         "paraphrase": 0.7368
       },
       "tokens_if_naive": 220550,
-      "tokens_actual": 18984,
-      "tokens_per_call": 345,
+      "tokens_actual": 23251,
+      "tokens_per_call": 423,
       "expected_calls": 1.164,
-      "tokens_per_resolution": 402,
-      "break_even_lookups": 10.0,
-      "tokens_saved_pct": 91.4,
+      "tokens_per_resolution": 492,
+      "break_even_lookups": 8.2,
+      "tokens_saved_pct": 89.5,
       "schema_tokens": 4582,
       "schema_count": 55,
       "repriced": {
-        "live public MCP servers": 484,
-        "GitHub-heavy catalog": 618
+        "live public MCP servers": 574,
+        "GitHub-heavy catalog": 708
       },
       "seconds": 0.11
     },
@@ -433,17 +433,17 @@
         "paraphrase": 0.5758
       },
       "tokens_if_naive": 760012,
-      "tokens_actual": 30622,
-      "tokens_per_call": 333,
+      "tokens_actual": 37708,
+      "tokens_per_call": 410,
       "expected_calls": 1.261,
-      "tokens_per_resolution": 420,
-      "break_even_lookups": 19.7,
-      "tokens_saved_pct": 96.0,
+      "tokens_per_resolution": 517,
+      "break_even_lookups": 16.0,
+      "tokens_saved_pct": 95.0,
       "schema_tokens": 7892,
       "schema_count": 92,
       "repriced": {
-        "live public MCP servers": 506,
-        "GitHub-heavy catalog": 651
+        "live public MCP servers": 603,
+        "GitHub-heavy catalog": 748
       },
       "seconds": 0.19
     },
@@ -472,7 +472,7 @@
         "live public MCP servers": 27874,
         "GitHub-heavy catalog": 48689
       },
-      "seconds": 1.52
+      "seconds": 1.56
     },
     {
       "catalog_size": 181,
@@ -541,19 +541,19 @@
         "paraphrase": 0.507
       },
       "tokens_if_naive": 2292462,
-      "tokens_actual": 50780,
-      "tokens_per_call": 319,
+      "tokens_actual": 62954,
+      "tokens_per_call": 396,
       "expected_calls": 1.409,
-      "tokens_per_resolution": 450,
-      "break_even_lookups": 32.0,
-      "tokens_saved_pct": 97.8,
+      "tokens_per_resolution": 558,
+      "break_even_lookups": 25.8,
+      "tokens_saved_pct": 97.3,
       "schema_tokens": 12805,
       "schema_count": 159,
       "repriced": {
-        "live public MCP servers": 553,
-        "GitHub-heavy catalog": 715
+        "live public MCP servers": 661,
+        "GitHub-heavy catalog": 823
       },
-      "seconds": 0.36
+      "seconds": 0.32
     }
   ]
 }

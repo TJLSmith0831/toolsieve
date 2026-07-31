@@ -6,7 +6,7 @@ FastMCP.
 
 ## Commands (verified 2026-07-27)
 - Install: `uv sync --group bench` (bench group adds tiktoken + rank-bm25, needed by benchmark tests)
-- Test all: `uv run pytest -q` — 85 tests, real MCP servers over stdio + local HTTP, no mocks, no network egress
+- Test all: `uv run --group bench pytest -q` — 169 tests (suite + benchmark units), real MCP servers over stdio + local HTTP, no mocks, no network egress. Plain `uv run pytest -q` skips `benchmarks/`, which needs the bench group
 - Test one file: `uv run pytest -q tests/test_setup_toolsieve.py`
 - Demo end-to-end, no config needed: `uv run python demo.py`
 - No lint/typecheck is configured — don't go looking for a `ruff`/`mypy` invocation, there isn't one
@@ -15,7 +15,7 @@ FastMCP.
 ## Map
 - `toolsieve/server.py` — MCP entry point; the 3 exposed tools live here
 - `toolsieve/aggregator.py` — connects to every downstream server, builds the tool `Catalog`
-- `toolsieve/router.py` — embedding match + `Savings`/token accounting
+- `toolsieve/router.py` — embedding match + `Savings`/token accounting. `rank()` is the ranking seam; `find()` composes the response shape (D20) — one schema, headline alternatives, and `also_available`, the roster of nearby tool *names* that lets a client prove a tool does not exist instead of rewording
 - `toolsieve/config.py` — `mcpServers`-shaped config + `.env` loading (GH #6)
 - `toolsieve/oauth.py` — token store + the browser-less `NonInteractiveOAuth` the server uses
 - `toolsieve/auth_cli.py` — the `toolsieve-auth` console script: the only place a browser opens
@@ -49,3 +49,20 @@ FastMCP.
 - Contribution workflow, PR title prefixes: `CONTRIBUTING.md`
 - Benchmark methodology and numbers: README `## Benchmarks`, `benchmarks/RESULTS.md`
 - Config shape, env vars, auth: README `## Configuration`
+
+## Measuring token burn (read before quoting a number)
+- **Tokens per *call* is the wrong meter.** A shape that answers cheaply but misses
+  often just moves the cost to the next call. Compare on `tokens_per_resolution`
+  in `benchmarks/results.json`. Judged per call, the pre-v0.3 shape looks better
+  than the one that replaced it; judged per resolution at real schema sizes, it
+  is not. That mistake was made once already.
+- **`benchmarks/catalog.json` schemas are ~80 tok/tool — unrepresentative.** Live
+  public MCP servers measure ~154 and GitHub-heavy ~269. The benchmark reprices
+  at all three (`repriced` per row, "Schema-size sensitivity" in RESULTS.md);
+  quote the repriced figures, not the raw catalog ones.
+- **The query set has no "tool does not exist" case**, which is the case that cost
+  the most in reality. The benchmark therefore *understates* the roster's value —
+  the live A/B is the measurement for that.
+- **Live A/B**: `toolsieve-smoke/smoke/rerun_arm2.sh`, with
+  `TOOLSIEVE_SRC=<checkout>`. Re-runs arm 2 only (arm 1 is Claude Code's own tool
+  search and has not changed), writes `arm2new-run*.json`, costs ~$1.70 for 3 runs.

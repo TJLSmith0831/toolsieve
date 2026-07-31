@@ -11,10 +11,10 @@ your client — and tells you how many tokens that saved.
 ![toolsieve running in Claude Code](https://raw.githubusercontent.com/TJLSmith0831/toolsieve/main/assets/demo.gif)
 
 *Claude Code (Sonnet) against 4 real MCP servers — 15 tools aggregated, 3 exposed.
-It routes "search my notes" and "read library docs" to the right tools, calls the
-weather tool for real, and reports **4,286 tokens saved (79.7%)** across the session.
-One recorded session, not the headline claim — see [Benchmarks](#benchmarks) for
-the measured numbers.*
+It routes "search my notes" and "read library docs" to the right tools and calls the
+weather tool for real. One recorded session, not the headline claim, and recorded
+before the v0.3 response redesign — the savings figure it shows is superseded by
+[Benchmarks](#benchmarks) below.*
 
 ## Why
 
@@ -35,7 +35,7 @@ And it shows its work. Every response carries a token-savings receipt.
 **181 tools from 25 real MCP servers** (GitHub, Slack, Notion, Linear, Stripe,
 Supabase, Playwright, Postgres and more), 159 queries with a known correct tool.
 
-> **A tool lookup costs ~450 tokens instead of the 14,418 it takes to load the
+> **A tool lookup costs ~558 tokens instead of the 14,418 it takes to load the
 > catalog.** The right tool arrives ready to call **69%** of the time, and is at
 > least *named* in the response **95%** of the time — so the other 31% costs one
 > cheap exact-name lookup, not a blind reformulation.
@@ -46,11 +46,11 @@ Both charts are on the same scale, so you can read one against the other:
 
 ```
   Tokens saved — climbs steeply with catalog size
-     10 tools   ███████████████████████████▉               69.7%
-     25 tools   ████████████████████████████████▋          81.6%
-     50 tools   ████████████████████████████████████▌      91.4%
-    100 tools   ██████████████████████████████████████▍    96.0%
-    181 tools   ███████████████████████████████████████▏   97.8%
+     10 tools   ████████████████████████▏                  60.5%
+     25 tools   ███████████████████████████████            77.7%
+     50 tools   ███████████████████████████████████▊       89.5%
+    100 tools   ██████████████████████████████████████     95.0%
+    181 tools   ██████████████████████████████████████▉    97.3%
 
   Right tool visible in the response — barely moves
      10 tools   ████████████████████████████████████████    100%
@@ -72,8 +72,8 @@ test against real GitHub and Context7 servers, a client hunting a plausible but
 nonexistent `get_repository` burned **four** searches to make three calls. The
 roster is ~6 tokens per name and removes that failure mode.
 
-In absolute terms: at 50 tools a `find_tools` call carries **345 tokens instead
-of 4,010**. At 181, **319 instead of 14,418**.
+In absolute terms: at 50 tools a `find_tools` call carries **423 tokens instead
+of 4,010**. At 181, **396 instead of 14,418**.
 
 ### Why not just keyword matching?
 
@@ -93,8 +93,8 @@ Because it falls apart on the queries real users actually type:
 
 *"Remember for later that Alice works at Acme"* against **Create multiple new
 entities in the knowledge graph** — not one word in common. BM25 has nothing to
-match on. Semantic matching doubles its accuracy on queries like these, and does
-it for fewer tokens per call, not more.
+match on. Semantic matching lifts accuracy on queries like these from 47% to
+74% — the tier that decides whether a client finds its tool or starts guessing.
 
 ### What a correct answer costs
 
@@ -107,7 +107,7 @@ does, four when neither (the rate the smoke test actually observed).
   Tokens spent per resolved lookup, 181-tool catalog
     naive       ████████████████████████████████████████  14,418
     BM25        █▍                                           489
-    toolsieve   █▎                                           450
+    toolsieve   █▌                                           558
                 ├───────────────────────────────────────┤
                 0                                  14,418
 ```
@@ -116,8 +116,8 @@ That meter also changed our mind about our own design. Judged per call,
 toolsieve's older v0.2 response shape looked cheaper — right up until you counted
 the calls its misses caused, and priced schemas at what real servers actually
 publish (154–269 tokens per tool, measured; this catalog is an unusually light
-80). Above ~113 tokens per tool the current shape wins, by **18% at 154** and
-**39% at 269**. Below it, the old one did.
+80). Above ~150 tokens per tool the current shape wins, by **1% at 154** and
+**30% at 269**. Below it, the old one did.
 
 Full per-size table, the schema-size sensitivity that settles that comparison,
 difficulty breakdown, and how to reproduce:
@@ -130,7 +130,7 @@ schema plus a roster — and a catalog that small is cheaper handed over whole.
 `toolsieve-setup --verify` says so rather than reporting a win that isn't there.
 
 Routing is also charged per lookup where loading a catalog is a one-off, so at
-181 tools toolsieve is ahead for roughly the first **32 lookups** of a session.
+181 tools toolsieve is ahead for roughly the first **26 lookups** of a session.
 Past that the up-front load is cheaper on raw tokens — though not on context
 window, and not on selection accuracy, which
 [degrades past ~30–50 tools](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool).

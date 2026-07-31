@@ -129,8 +129,10 @@ def response_tokens(result: dict[str, Any]) -> int:
     """
     if "matches" in result:
         return real_tokens(as_payloads(result["matches"]))
-    body = [result.get("tool"), result.get("alternatives"), result.get("also_available")]
-    return len(_json_tokens(body))
+    # Everything except the receipt, which cannot contain its own size. The
+    # guidance line counts: it is ~25 tokens on every response and it is what
+    # made the live re-run converge in three calls instead of four.
+    return len(_json_tokens({k: v for k, v in result.items() if k != "savings"}))
 
 
 def _json_tokens(obj: Any) -> list[int]:

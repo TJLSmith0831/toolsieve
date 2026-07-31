@@ -217,23 +217,15 @@ class Router:
         for t, _ in roster:
             also.setdefault(t.server, []).append(t.name)
 
+        # No server map here on purpose: the server list is already in this
+        # instance's MCP instructions and in every tool description, which live
+        # in the cached system prompt. Repeating it per response measured ~150
+        # tokens a call on a 25-server catalog — paid every call, for something
+        # the client was told once for free.
         result: dict[str, Any] = {
             "tool": tool,
             "alternatives": alts,
             "also_available": also,
-            "servers": self._server_counts(),
-        }
-
-        # Count what this response actually costs the client — schema, headlines
-        # and roster alike. Excluding the roster would flatter the receipt by
-        # hiding a real (if small) cost, and the receipt is the product's claim.
-        actual = estimate_tokens(
-            json.dumps([tool] if tool else []) + json.dumps(alts) + json.dumps(also)
-        )
-        result["savings"] = {
-            "tokens_if_naive": self.naive_tokens,
-            "tokens_actual": actual,
-            "saved_pct": saved_pct(self.naive_tokens, actual),
         }
 
         if message:
@@ -260,14 +252,18 @@ class Router:
                     f"{self.confidence_threshold}. " + result["message"]
                 )
                 log.info("low-confidence match (best %.4f of %d)", tool["score"], searched)
-        return result
 
-    def _server_counts(self) -> dict[str, int]:
-        """Every server in the catalog. O(servers), so it survives any catalog size."""
-        counts: dict[str, int] = {}
-        for tool in self.tools:
-            counts[tool.server] = counts.get(tool.server, 0) + 1
-        return counts
+        # Count what this response actually costs the client — schema, headlines,
+        # roster and the guidance line alike. Excluding any of it would flatter
+        # the receipt by hiding a real cost, and the receipt is the product's
+        # whole claim. Computed last so nothing added above escapes the count.
+        actual = estimate_tokens(json.dumps(result))
+        result["savings"] = {
+            "tokens_if_naive": self.naive_tokens,
+            "tokens_actual": actual,
+            "saved_pct": saved_pct(self.naive_tokens, actual),
+        }
+        return result
 
     def _empty_message(self, exclude: list[str] | None) -> str:
         if not self.tools:

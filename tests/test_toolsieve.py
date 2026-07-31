@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from toolsieve.aggregator import Aggregator, DownstreamError  # noqa: E402
+from toolsieve.aggregator import AggregatedTool, Aggregator, DownstreamError  # noqa: E402
 from toolsieve.config import (  # noqa: E402
     ConfigError,
     ServerConfig,
@@ -562,7 +562,10 @@ def test_roster_names_every_tool_so_absence_is_provable(router):
     result = router.find("something completely unrelated to this catalog", k=1)
     listed = {name for names in result["also_available"].values() for name in names}
     assert listed == {"get_weather", "search_docs"}
-    assert result["servers"] == {"docs": 2}
+    assert set(result["also_available"]) == {"docs"}  # grouped by owning server
+    # The server list is not repeated per response — it is in the instructions
+    # and every tool description, which the client caches once.
+    assert "servers" not in result
 
 
 def test_exact_name_query_returns_that_tools_schema(router):
@@ -635,20 +638,47 @@ def test_empty_catalog_returns_no_tool():
 
 
 def test_per_call_savings_metadata(router):
-    """Scenario: Per-call savings metadata."""
+    """Scenario: Per-call savings metadata.
+
+    This fixture's catalog is 2 tools, which is below the size where routing
+    pays for itself — so the receipt reports a *negative* saving, and must. A
+    response has a floor price (schema + roster + guidance) that a catalog this
+    small does not clear. `toolsieve-setup --verify` warns about exactly this.
+    """
     savings = router.find("what is the weather", k=1)["savings"]
+    assert savings["tokens_actual"] > 0
+    assert savings["tokens_actual"] > savings["tokens_if_naive"], "2 tools: routing loses"
+    assert savings["saved_pct"] < 0, "and the receipt must say so rather than clamp to 0"
+
+
+def test_savings_are_positive_once_the_catalog_is_worth_sieving(tmp_path_factory):
+    """The same receipt, on a catalog big enough to route. The claim, minimally."""
+    tools = [
+        AggregatedTool(
+            server="big",
+            name=f"tool_{i}",
+            description=f"Does thing number {i} with several documented parameters.",
+            input_schema={"type": "object", "properties": {f"p{i}": {"type": "string"}}},
+        )
+        for i in range(60)
+    ]
+    savings = Router(tools).find("do thing number 7", k=3)["savings"]
     assert savings["tokens_if_naive"] > savings["tokens_actual"] > 0
-    assert savings["saved_pct"] > 0
+    assert savings["saved_pct"] > 50
 
 
-def test_savings_receipt_counts_the_roster_too(router):
-    """The receipt must not flatter itself by hiding the roster's cost."""
+def test_savings_receipt_counts_everything_it_shipped(router):
+    """The receipt must not flatter itself by hiding any part of the response.
+
+    The roster and the guidance line are real tokens the client pays for. Only
+    `savings` itself is excluded, and only because it cannot contain its own
+    size.
+    """
     result = router.find("what is the weather", k=3)
-    body = json.dumps(
-        [result["tool"]]
-    ) + json.dumps(result["alternatives"]) + json.dumps(result["also_available"])
+    counted = {k: v for k, v in result.items() if k != "savings"}
+    assert set(counted) == {"tool", "alternatives", "also_available", "message"}
     # chars/4, the same estimator the receipt uses — so this is exact, not fuzzy.
-    assert result["savings"]["tokens_actual"] == len(body) // 4
+    assert result["savings"]["tokens_actual"] == len(json.dumps(counted)) // 4
 
 
 def test_session_savings_report_accumulates():

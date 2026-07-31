@@ -192,6 +192,22 @@ def sensitivity_section(results: dict[str, Any]) -> list[str]:
                 "sits above it. The benchmark catalog is the exception, not the case to "
                 "optimise for.",
             ]
+        lines += [
+            "",
+            "### What this table cannot see",
+            "",
+            "Every query in the set has a correct answer. The case that actually cost "
+            "the most in the pre-release smoke test does not: the client was hunting a "
+            "`get_repository` that **does not exist** on the GitHub MCP server, and no "
+            "ranking can retrieve a tool that is not there. A ranked list has no way to "
+            "say so, so the client rewords and searches again; a roster of names does, "
+            "and that difference is invisible here because it never arises.",
+            "",
+            "So treat these rows as the *conservative* estimate of the roster's value, "
+            "and the live A/B as the measurement of it: against real GitHub and Context7 "
+            "servers the same task went from 4 `find_tools` calls to 3 with no variance "
+            "across three runs, and `find_tools` token cost fell 62%.",
+        ]
     return lines
 
 
