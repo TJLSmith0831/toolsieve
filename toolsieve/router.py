@@ -238,16 +238,28 @@ class Router:
 
         if message:
             result["message"] = message
-        elif tool is not None and tool.get("confidence") == "low":
+        elif tool is not None:
+            # Unconditional, not just on low confidence (D20 amended). The live
+            # smoke re-run showed the roster being *delivered and ignored*: the
+            # top match for "get repository details" was `get_tag` at 0.77 —
+            # above the threshold, so no guidance was attached — while
+            # `search_repositories` sat ninth in `also_available`. The client
+            # rephrased three more times. Confidently-wrong is the failure mode
+            # that costs round trips, and a score cannot detect it, so the
+            # pointer has to be on every response. ~25 tokens against an ~800
+            # token wasted search.
             result["message"] = (
-                f"Low confidence: the best match scored {tool['score']}, below "
-                f"{self.confidence_threshold}. Before reformulating this query, read "
-                "`also_available` — it lists every tool name in the neighbourhood, so "
-                "if the tool you had in mind is not there, it does not exist. To get "
-                "the schema for one you do see, call find_tools again with its exact "
-                "name as the query."
+                f"If `{tool['name']}` is not what you meant, do not reword this query: "
+                "`also_available` lists every nearby tool name, and a name that is not "
+                "there does not exist on these servers. Call find_tools again with an "
+                "exact name from that list to get its schema."
             )
-            log.info("low-confidence match (best %.4f of %d)", tool["score"], searched)
+            if tool.get("confidence") == "low":
+                result["message"] = (
+                    f"Low confidence: the best match scored {tool['score']}, below "
+                    f"{self.confidence_threshold}. " + result["message"]
+                )
+                log.info("low-confidence match (best %.4f of %d)", tool["score"], searched)
         return result
 
     def _server_counts(self) -> dict[str, int]:

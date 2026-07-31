@@ -591,9 +591,27 @@ def test_weak_match_is_flagged_not_withheld(router):
 
 def test_strong_match_is_not_flagged(router):
     """The confidence tag must actually discriminate, not tag everything."""
-    top = router.find("search the documentation", k=1)["tool"]
+    result = router.find("search the documentation", k=1)
+    top = result["tool"]
     assert "confidence" not in top
     assert top["score"] >= router.confidence_threshold
+    assert "Low confidence" not in result["message"]
+
+
+def test_a_confident_match_still_points_at_the_roster(router):
+    """Confidently-wrong is the failure that costs round trips (D20 amended).
+
+    In the live smoke re-run the top match for "get repository details" was
+    `get_tag`, scoring above the threshold, so no guidance was attached — while
+    `search_repositories` sat ninth in `also_available`. The client rephrased
+    three more times. A score cannot detect a wrong-but-plausible match, so the
+    pointer has to ride on every response, not just the ones that look shaky.
+    """
+    result = router.find("search the documentation", k=1)
+    assert "confidence" not in result["tool"], "this fixture must be the confident path"
+    assert "also_available" in result["message"]
+    assert "does not exist" in result["message"]
+    assert "do not reword" in result["message"]
 
 
 def test_excluded_tool_is_withheld(router):
