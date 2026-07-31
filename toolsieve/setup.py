@@ -365,7 +365,35 @@ async def _verify() -> int:
         print("\nEmpty catalog — find_tools will match nothing. Check the server "
               "entries above and any ${VAR} tokens they reference.")
         return 1
+    print(worth_it(report["tools_aggregated"]) or "", end="")
     return 0
+
+
+# Below this, routing costs more than it saves (D22). A find_tools response has
+# a floor price — one schema plus a roster — and a catalog this small is cheaper
+# handed over whole. Measured on the benchmark: at 10 tools the sieve is barely
+# ahead, and at 3 it is behind. Anthropic's own tool-search guidance draws the
+# line in the same place ("fewer than 10 tools" -> don't).
+WORTH_IT_MIN_TOOLS = 10
+
+
+def worth_it(tools: int) -> str | None:
+    """Say so when a catalog is too small to be worth routing.
+
+    Silence here would be the dishonest option: toolsieve cannot un-register
+    itself from a client mid-session, so the only moment this advice is
+    actionable is at setup time — which is exactly when it is cheapest to act
+    on. A tool that only ever reports wins is not a measurement tool.
+    """
+    if tools >= WORTH_IT_MIN_TOOLS:
+        return None
+    return (
+        f"\n⚠ Only {tools} tool(s) aggregated. Below ~{WORTH_IT_MIN_TOOLS}, routing "
+        "costs more tokens than it saves: a find_tools response carries a schema and a "
+        "roster, which is more than a catalog this small costs to load outright.\n"
+        "  Either connect more servers, or point your client back at them directly — "
+        "the pre-migration config is saved alongside it as `.toolsieve-bak`.\n"
+    )
 
 
 def main() -> int:

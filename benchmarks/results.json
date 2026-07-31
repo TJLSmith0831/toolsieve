@@ -5,6 +5,11 @@
   "queries": 159,
   "tokenizer": "tiktoken/cl100k_base",
   "embed_model": "BAAI/bge-small-en-v1.5",
+  "schema_sizes": {
+    "live public MCP servers": 154,
+    "GitHub-heavy catalog": 269
+  },
+  "miss_calls": 4,
   "sources": {
     "catalog": "catalog.json",
     "queries": "queries.jsonl"
@@ -16,6 +21,7 @@
       "queries": 14,
       "k": 10.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -23,7 +29,17 @@
       },
       "tokens_if_naive": 11676,
       "tokens_actual": 11676,
+      "tokens_per_call": 834,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 834,
+      "break_even_lookups": 1.0,
       "tokens_saved_pct": 0.0,
+      "schema_tokens": 11676,
+      "schema_count": 140,
+      "repriced": {
+        "live public MCP servers": 1540,
+        "GitHub-heavy catalog": 2690
+      },
       "seconds": 0.01
     },
     {
@@ -32,6 +48,7 @@
       "queries": 14,
       "k": 3.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -39,15 +56,26 @@
       },
       "tokens_if_naive": 11676,
       "tokens_actual": 4060,
+      "tokens_per_call": 290,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 290,
+      "break_even_lookups": 2.9,
       "tokens_saved_pct": 65.2,
+      "schema_tokens": 4060,
+      "schema_count": 42,
+      "repriced": {
+        "live public MCP servers": 462,
+        "GitHub-heavy catalog": 807
+      },
       "seconds": 0.0
     },
     {
       "catalog_size": 10,
-      "method": "toolsieve",
+      "method": "toolsieve-v0.2",
       "queries": 14,
       "k": 3.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -55,7 +83,44 @@
       },
       "tokens_if_naive": 11676,
       "tokens_actual": 3890,
+      "tokens_per_call": 278,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 278,
+      "break_even_lookups": 3.0,
       "tokens_saved_pct": 66.7,
+      "schema_tokens": 3890,
+      "schema_count": 42,
+      "repriced": {
+        "live public MCP servers": 462,
+        "GitHub-heavy catalog": 807
+      },
+      "seconds": 0.03
+    },
+    {
+      "catalog_size": 10,
+      "method": "toolsieve",
+      "queries": 14,
+      "k": 1.0,
+      "recall_at_k": 1.0,
+      "recall_visible": 1.0,
+      "recall_by_difficulty": {
+        "ambiguous": 1.0,
+        "exact": 1.0,
+        "paraphrase": 1.0
+      },
+      "tokens_if_naive": 11676,
+      "tokens_actual": 3537,
+      "tokens_per_call": 253,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 253,
+      "break_even_lookups": 3.3,
+      "tokens_saved_pct": 69.7,
+      "schema_tokens": 1290,
+      "schema_count": 14,
+      "repriced": {
+        "live public MCP servers": 314,
+        "GitHub-heavy catalog": 430
+      },
       "seconds": 0.03
     },
     {
@@ -64,6 +129,7 @@
       "queries": 38,
       "k": 25.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -71,8 +137,18 @@
       },
       "tokens_if_naive": 76684,
       "tokens_actual": 76684,
+      "tokens_per_call": 2018,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 2018,
+      "break_even_lookups": 1.0,
       "tokens_saved_pct": 0.0,
-      "seconds": 0.04
+      "schema_tokens": 76684,
+      "schema_count": 950,
+      "repriced": {
+        "live public MCP servers": 3850,
+        "GitHub-heavy catalog": 6725
+      },
+      "seconds": 0.05
     },
     {
       "catalog_size": 25,
@@ -80,6 +156,7 @@
       "queries": 38,
       "k": 3.0,
       "recall_at_k": 0.7895,
+      "recall_visible": 0.7895,
       "recall_by_difficulty": {
         "ambiguous": 0.7273,
         "exact": 1.0,
@@ -87,15 +164,26 @@
       },
       "tokens_if_naive": 76684,
       "tokens_actual": 9518,
+      "tokens_per_call": 250,
+      "expected_calls": 1.632,
+      "tokens_per_resolution": 409,
+      "break_even_lookups": 4.9,
       "tokens_saved_pct": 87.6,
+      "schema_tokens": 9518,
+      "schema_count": 114,
+      "repriced": {
+        "live public MCP servers": 754,
+        "GitHub-heavy catalog": 1317
+      },
       "seconds": 0.01
     },
     {
       "catalog_size": 25,
-      "method": "toolsieve",
+      "method": "toolsieve-v0.2",
       "queries": 38,
       "k": 3.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -103,8 +191,45 @@
       },
       "tokens_if_naive": 76684,
       "tokens_actual": 9408,
+      "tokens_per_call": 248,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 248,
+      "break_even_lookups": 8.2,
       "tokens_saved_pct": 87.7,
-      "seconds": 0.11
+      "schema_tokens": 9408,
+      "schema_count": 114,
+      "repriced": {
+        "live public MCP servers": 462,
+        "GitHub-heavy catalog": 807
+      },
+      "seconds": 0.07
+    },
+    {
+      "catalog_size": 25,
+      "method": "toolsieve",
+      "queries": 38,
+      "k": 1.0,
+      "recall_at_k": 0.9474,
+      "recall_visible": 1.0,
+      "recall_by_difficulty": {
+        "ambiguous": 0.8182,
+        "exact": 1.0,
+        "paraphrase": 1.0
+      },
+      "tokens_if_naive": 76684,
+      "tokens_actual": 14115,
+      "tokens_per_call": 371,
+      "expected_calls": 1.053,
+      "tokens_per_resolution": 391,
+      "break_even_lookups": 5.2,
+      "tokens_saved_pct": 81.6,
+      "schema_tokens": 3231,
+      "schema_count": 38,
+      "repriced": {
+        "live public MCP servers": 464,
+        "GitHub-heavy catalog": 585
+      },
+      "seconds": 0.08
     },
     {
       "catalog_size": 50,
@@ -112,6 +237,7 @@
       "queries": 55,
       "k": 50.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -119,8 +245,18 @@
       },
       "tokens_if_naive": 220550,
       "tokens_actual": 220550,
+      "tokens_per_call": 4010,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 4010,
+      "break_even_lookups": 1.0,
       "tokens_saved_pct": 0.0,
-      "seconds": 0.11
+      "schema_tokens": 220550,
+      "schema_count": 2750,
+      "repriced": {
+        "live public MCP servers": 7700,
+        "GitHub-heavy catalog": 13450
+      },
+      "seconds": 0.15
     },
     {
       "catalog_size": 50,
@@ -128,6 +264,7 @@
       "queries": 55,
       "k": 3.0,
       "recall_at_k": 0.7636,
+      "recall_visible": 0.7636,
       "recall_by_difficulty": {
         "ambiguous": 0.7857,
         "exact": 1.0,
@@ -135,15 +272,26 @@
       },
       "tokens_if_naive": 220550,
       "tokens_actual": 13774,
+      "tokens_per_call": 250,
+      "expected_calls": 1.709,
+      "tokens_per_resolution": 428,
+      "break_even_lookups": 9.4,
       "tokens_saved_pct": 93.8,
+      "schema_tokens": 13774,
+      "schema_count": 165,
+      "repriced": {
+        "live public MCP servers": 790,
+        "GitHub-heavy catalog": 1379
+      },
       "seconds": 0.01
     },
     {
       "catalog_size": 50,
-      "method": "toolsieve",
+      "method": "toolsieve-v0.2",
       "queries": 55,
       "k": 3.0,
       "recall_at_k": 0.9818,
+      "recall_visible": 0.9818,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -151,8 +299,45 @@
       },
       "tokens_if_naive": 220550,
       "tokens_actual": 13268,
+      "tokens_per_call": 241,
+      "expected_calls": 1.055,
+      "tokens_per_resolution": 254,
+      "break_even_lookups": 15.8,
       "tokens_saved_pct": 94.0,
-      "seconds": 0.12
+      "schema_tokens": 13268,
+      "schema_count": 165,
+      "repriced": {
+        "live public MCP servers": 487,
+        "GitHub-heavy catalog": 851
+      },
+      "seconds": 0.11
+    },
+    {
+      "catalog_size": 50,
+      "method": "toolsieve",
+      "queries": 55,
+      "k": 1.0,
+      "recall_at_k": 0.8364,
+      "recall_visible": 1.0,
+      "recall_by_difficulty": {
+        "ambiguous": 0.7143,
+        "exact": 1.0,
+        "paraphrase": 0.7368
+      },
+      "tokens_if_naive": 220550,
+      "tokens_actual": 18984,
+      "tokens_per_call": 345,
+      "expected_calls": 1.164,
+      "tokens_per_resolution": 402,
+      "break_even_lookups": 10.0,
+      "tokens_saved_pct": 91.4,
+      "schema_tokens": 4582,
+      "schema_count": 55,
+      "repriced": {
+        "live public MCP servers": 484,
+        "GitHub-heavy catalog": 618
+      },
+      "seconds": 0.11
     },
     {
       "catalog_size": 100,
@@ -160,6 +345,7 @@
       "queries": 92,
       "k": 100.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -167,8 +353,18 @@
       },
       "tokens_if_naive": 760012,
       "tokens_actual": 760012,
+      "tokens_per_call": 8261,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 8261,
+      "break_even_lookups": 1.0,
       "tokens_saved_pct": 0.0,
-      "seconds": 0.32
+      "schema_tokens": 760012,
+      "schema_count": 9200,
+      "repriced": {
+        "live public MCP servers": 15400,
+        "GitHub-heavy catalog": 26900
+      },
+      "seconds": 0.51
     },
     {
       "catalog_size": 100,
@@ -176,6 +372,7 @@
       "queries": 92,
       "k": 3.0,
       "recall_at_k": 0.7717,
+      "recall_visible": 0.7717,
       "recall_by_difficulty": {
         "ambiguous": 0.8636,
         "exact": 1.0,
@@ -183,15 +380,26 @@
       },
       "tokens_if_naive": 760012,
       "tokens_actual": 23866,
+      "tokens_per_call": 259,
+      "expected_calls": 1.685,
+      "tokens_per_resolution": 437,
+      "break_even_lookups": 18.9,
       "tokens_saved_pct": 96.9,
+      "schema_tokens": 23866,
+      "schema_count": 276,
+      "repriced": {
+        "live public MCP servers": 778,
+        "GitHub-heavy catalog": 1360
+      },
       "seconds": 0.02
     },
     {
       "catalog_size": 100,
-      "method": "toolsieve",
+      "method": "toolsieve-v0.2",
       "queries": 92,
       "k": 3.0,
       "recall_at_k": 0.9239,
+      "recall_visible": 0.9239,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -199,8 +407,45 @@
       },
       "tokens_if_naive": 760012,
       "tokens_actual": 23362,
+      "tokens_per_call": 254,
+      "expected_calls": 1.228,
+      "tokens_per_resolution": 312,
+      "break_even_lookups": 26.5,
       "tokens_saved_pct": 96.9,
-      "seconds": 0.23
+      "schema_tokens": 23362,
+      "schema_count": 276,
+      "repriced": {
+        "live public MCP servers": 567,
+        "GitHub-heavy catalog": 991
+      },
+      "seconds": 0.18
+    },
+    {
+      "catalog_size": 100,
+      "method": "toolsieve",
+      "queries": 92,
+      "k": 1.0,
+      "recall_at_k": 0.7609,
+      "recall_visible": 0.9891,
+      "recall_by_difficulty": {
+        "ambiguous": 0.6364,
+        "exact": 1.0,
+        "paraphrase": 0.5758
+      },
+      "tokens_if_naive": 760012,
+      "tokens_actual": 30622,
+      "tokens_per_call": 333,
+      "expected_calls": 1.261,
+      "tokens_per_resolution": 420,
+      "break_even_lookups": 19.7,
+      "tokens_saved_pct": 96.0,
+      "schema_tokens": 7892,
+      "schema_count": 92,
+      "repriced": {
+        "live public MCP servers": 506,
+        "GitHub-heavy catalog": 651
+      },
+      "seconds": 0.19
     },
     {
       "catalog_size": 181,
@@ -208,6 +453,7 @@
       "queries": 159,
       "k": 181.0,
       "recall_at_k": 1.0,
+      "recall_visible": 1.0,
       "recall_by_difficulty": {
         "ambiguous": 1.0,
         "exact": 1.0,
@@ -215,8 +461,18 @@
       },
       "tokens_if_naive": 2292462,
       "tokens_actual": 2292462,
+      "tokens_per_call": 14418,
+      "expected_calls": 1.0,
+      "tokens_per_resolution": 14418,
+      "break_even_lookups": 1.0,
       "tokens_saved_pct": 0.0,
-      "seconds": 1.0
+      "schema_tokens": 2292462,
+      "schema_count": 28779,
+      "repriced": {
+        "live public MCP servers": 27874,
+        "GitHub-heavy catalog": 48689
+      },
+      "seconds": 1.52
     },
     {
       "catalog_size": 181,
@@ -224,6 +480,7 @@
       "queries": 159,
       "k": 3.0,
       "recall_at_k": 0.6541,
+      "recall_visible": 0.6541,
       "recall_by_difficulty": {
         "ambiguous": 0.7812,
         "exact": 1.0,
@@ -231,15 +488,26 @@
       },
       "tokens_if_naive": 2292462,
       "tokens_actual": 38123,
+      "tokens_per_call": 240,
+      "expected_calls": 2.038,
+      "tokens_per_resolution": 489,
+      "break_even_lookups": 29.5,
       "tokens_saved_pct": 98.3,
-      "seconds": 0.04
+      "schema_tokens": 38123,
+      "schema_count": 477,
+      "repriced": {
+        "live public MCP servers": 941,
+        "GitHub-heavy catalog": 1644
+      },
+      "seconds": 0.05
     },
     {
       "catalog_size": 181,
-      "method": "toolsieve",
+      "method": "toolsieve-v0.2",
       "queries": 159,
       "k": 3.0,
       "recall_at_k": 0.8491,
+      "recall_visible": 0.8491,
       "recall_by_difficulty": {
         "ambiguous": 0.9062,
         "exact": 1.0,
@@ -247,8 +515,45 @@
       },
       "tokens_if_naive": 2292462,
       "tokens_actual": 38819,
+      "tokens_per_call": 244,
+      "expected_calls": 1.453,
+      "tokens_per_resolution": 355,
+      "break_even_lookups": 40.6,
       "tokens_saved_pct": 98.3,
-      "seconds": 0.4
+      "schema_tokens": 38819,
+      "schema_count": 477,
+      "repriced": {
+        "live public MCP servers": 671,
+        "GitHub-heavy catalog": 1172
+      },
+      "seconds": 0.32
+    },
+    {
+      "catalog_size": 181,
+      "method": "toolsieve",
+      "queries": 159,
+      "k": 1.0,
+      "recall_at_k": 0.6918,
+      "recall_visible": 0.9497,
+      "recall_by_difficulty": {
+        "ambiguous": 0.5625,
+        "exact": 1.0,
+        "paraphrase": 0.507
+      },
+      "tokens_if_naive": 2292462,
+      "tokens_actual": 50780,
+      "tokens_per_call": 319,
+      "expected_calls": 1.409,
+      "tokens_per_resolution": 450,
+      "break_even_lookups": 32.0,
+      "tokens_saved_pct": 97.8,
+      "schema_tokens": 12805,
+      "schema_count": 159,
+      "repriced": {
+        "live public MCP servers": 553,
+        "GitHub-heavy catalog": 715
+      },
+      "seconds": 0.36
     }
   ]
 }

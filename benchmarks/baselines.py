@@ -1,8 +1,9 @@
-"""The two things toolsieve claims to beat: no routing, and lexical routing.
+"""The three things toolsieve claims to beat: no routing, lexical routing, and
+its own previous release.
 
-Both expose `find(query, k)` returning the same dict `toolsieve.router.Router`
-does, so the orchestrator scores all three through one code path with no
-per-method branching (spec: "Every method scored on the same interface").
+All expose `find(query, k)` returning a `matches` list, which the orchestrator
+adapts alongside the shipped router's richer shape (D20) through one scoring
+path.
 
 Token counts here use `real_tokens` (tiktoken, D4) rather than the router's
 chars/4 estimator, so every cell of the results table is comparable.
@@ -16,7 +17,7 @@ from typing import Any
 from rank_bm25 import BM25Okapi
 
 from toolsieve.aggregator import AggregatedTool
-from toolsieve.router import saved_pct, tool_payload
+from toolsieve.router import Router, saved_pct, tool_payload
 
 from .scoring import real_tokens
 
@@ -85,3 +86,22 @@ class BM25Router(_Baseline):
         scores = self._bm25.get_scores(tokenize(query))
         ranked = sorted(range(len(self.tools)), key=lambda i: -scores[i])[: max(1, k)]
         return self._result([self.tools[i] for i in ranked])
+
+
+class LegacyToolsieve(_Baseline):
+    """toolsieve v0.2: the same embeddings, the response shape D20 replaced.
+
+    Identical ranking to the shipped router — it reuses `Router.rank` — so any
+    difference between this row and the `toolsieve` row is attributable to the
+    response shape alone, not to a change in matching. That is the point of
+    including it: the rework's claim is about what a response *costs* and what
+    it lets a client conclude, and this isolates exactly that.
+    """
+
+    def __init__(self, tools: list[AggregatedTool], embedder: Any = None) -> None:
+        super().__init__(tools)
+        self._router = Router(tools, embedder=embedder)
+
+    def find(self, query: str, k: int = 3, exclude: list[str] | None = None) -> dict[str, Any]:
+        ranked = self._router.rank(query, exclude=exclude)
+        return self._result([t for t, _ in ranked[: max(1, k)]])
