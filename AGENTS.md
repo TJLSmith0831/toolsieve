@@ -66,3 +66,29 @@ FastMCP.
 - **Live A/B**: `toolsieve-smoke/smoke/rerun_arm2.sh`, with
   `TOOLSIEVE_SRC=<checkout>`. Re-runs arm 2 only (arm 1 is Claude Code's own tool
   search and has not changed), writes `arm2new-run*.json`, costs ~$1.70 for 3 runs.
+
+## Dynamic tool registration — tested, does not work (2026-07-31)
+Promoting a found tool into a real MCP tool (`add_tool` +
+`notifications/tools/list_changed`) closes the measured gap against a client's
+own tool search on paper: their search returns a pointer the API expands into
+*cached* tool definitions (~99 tok/call), ours returns the schema inline in the
+conversation (~808 tok/call). The extra proxy hop is not the gap — it costs ~33
+tokens a run.
+
+The mechanism works at the protocol level, verified end to end through a real
+MCP client: tool registered, downstream schema passed through, notification
+observed on the wire. **Claude Code ignores it.** Asked directly, mid-session,
+after a `find_tools` call that returned `callable_as`, a live session reported
+exactly three `mcp__toolsieve__*` tools and no promoted one — it snapshots MCP
+tools at connect time. Reverted rather than shipped as dead weight (see the
+revert of `feat: promote a found tool into a real one` for the working code).
+
+Two notes for whoever revisits this:
+- `Tool.from_function` rejects `**kwargs`; construct `FunctionTool` directly to
+  pass a downstream JSON schema through unaltered.
+- A promoted tool needs the downstream `outputSchema` too, or structured results
+  silently flatten to text — the D18 failure again.
+- The only variant that could work against a connect-time snapshot is
+  registering a *persisted* working set at startup: learn which tools a project
+  actually uses, register those statically next session, keep find_tools for the
+  tail. Not attempted.

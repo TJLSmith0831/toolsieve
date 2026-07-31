@@ -648,9 +648,8 @@ def test_per_call_savings_metadata(router):
     """
     savings = router.find("what is the weather", k=1)["savings"]
     assert savings["tokens_actual"] > 0
-    # Within a token or two of break-even either way. Asserting the sign would be
-    # a knife-edge test — what matters is that nothing worth having is claimed.
-    assert abs(savings["saved_pct"]) < 10, "2 tools: routing neither saves nor should"
+    assert savings["tokens_actual"] > savings["tokens_if_naive"], "2 tools: routing loses"
+    assert savings["saved_pct"] < 0, "and the receipt must say so rather than clamp to 0"
 
 
 def test_savings_are_positive_once_the_catalog_is_worth_sieving(tmp_path_factory):
@@ -776,62 +775,6 @@ def test_failed_server_is_visible_to_the_client(tmp_path):
     report = asyncio.run(run())
     assert "dead" in report["unavailable_servers"]
     assert report["tools_aggregated"] == 2  # the healthy server is still usable
-
-
-def test_a_found_tool_becomes_directly_callable(tmp_path):
-    """Scenario: find_tools promotes what it found into a real tool (D23).
-
-    The gap against a client's own tool search is not the extra hop — that costs
-    ~33 tokens a run, measured. It is that their search returns a *pointer* the
-    API expands into the cached tool definitions (~99 tokens a call) while
-    find_tools returns the schema inline in the conversation (~808). MCP has the
-    same mechanism available: a server may change its own tool list and notify.
-    So a found tool is registered, and the client calls it like any other.
-    """
-    import os
-
-    from fastmcp import Client
-    from fastmcp.client.transports import StdioTransport
-
-    root = Path(__file__).resolve().parents[1]
-    cfg = write_config(tmp_path / "c.json", {"docs": good("docs")})
-
-    notifications: list[str] = []
-
-    async def on_message(message):
-        body = getattr(message, "root", message)
-        method = getattr(body, "method", None)
-        if method:
-            notifications.append(method)
-
-    async def run():
-        transport = StdioTransport(
-            command=sys.executable,
-            args=["-m", "toolsieve"],
-            cwd=str(root),
-            env={**os.environ, "TOOLSIEVE_CONFIG": str(cfg)},
-        )
-        async with Client(transport, message_handler=on_message) as client:
-            before = sorted(t.name for t in await client.list_tools())
-            await client.call_tool("find_tools", {"query": "the weather today"})
-            await asyncio.sleep(0.3)  # let the notification arrive
-            after = sorted(t.name for t in await client.list_tools())
-            called = (await client.call_tool("docs__get_weather", {"city": "Boston"})).data
-            return before, after, called
-
-    before, after, called = asyncio.run(run())
-
-    # Registering silently is useless: a client only re-reads its tool list when
-    # told to. Without this notification the promotion is invisible to everyone
-    # who is not already polling, which is everyone.
-    assert "notifications/tools/list_changed" in notifications
-
-    # Still only three tools until something is actually looked up: the catalog
-    # is not what enters context, only what the session has needed so far.
-    assert before == ["call_tool", "find_tools", "get_savings_report"]
-    assert "docs__get_weather" in after, "a found tool must become callable directly"
-    assert "docs__search_docs" not in after, "only what was found, not the whole catalog"
-    assert called == "sunny in Boston"
 
 
 def test_two_instances_are_distinguishable(tmp_path):

@@ -79,15 +79,12 @@ def estimate_tokens(text: str) -> int:
 
 def tool_payload(tool: AggregatedTool) -> dict[str, Any]:
     """A tool the client can call right now — the expensive shape, with schema."""
-    payload = {
+    return {
         "server": tool.server,
         "name": tool.name,
         "description": tool.description,
         "input_schema": tool.input_schema,
     }
-    if tool.output_schema:
-        payload["output_schema"] = tool.output_schema
-    return payload
 
 
 def tool_headline(tool: AggregatedTool) -> dict[str, Any]:
