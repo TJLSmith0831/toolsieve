@@ -31,7 +31,7 @@ from typing import Any, Protocol
 # `python benchmarks/run_benchmark.py` and as `python -m benchmarks.run_benchmark`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from benchmarks.baselines import BM25Router, LegacyToolsieve, NaiveRouter  # noqa: E402
+from benchmarks.baselines import BM25Router, NaiveRouter, SchemaPerMatchRouter  # noqa: E402
 from benchmarks.data import CATALOG_PATH, QUERIES_PATH, Query, load_catalog, load_queries  # noqa: E402
 from benchmarks.scoring import real_tokens, recall_at_k  # noqa: E402
 from toolsieve.aggregator import AggregatedTool  # noqa: E402
@@ -266,7 +266,7 @@ def run(
         methods: dict[str, RouterLike] = {
             "naive": NaiveRouter(tools),
             "bm25": BM25Router(tools),
-            "toolsieve-v0.2": LegacyToolsieve(tools, embedder=embedder),
+            "toolsieve-v0.2": SchemaPerMatchRouter(tools, embedder=embedder),
             "toolsieve": Router(tools, embedder=embedder),
         }
         for name, router in methods.items():

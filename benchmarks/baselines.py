@@ -88,7 +88,7 @@ class BM25Router(_Baseline):
         return self._result([self.tools[i] for i in ranked])
 
 
-class LegacyToolsieve(_Baseline):
+class SchemaPerMatchRouter(_Baseline):
     """toolsieve v0.2: the same embeddings, the response shape D20 replaced.
 
     Identical ranking to the shipped router — it reuses `Router.rank` — so any
