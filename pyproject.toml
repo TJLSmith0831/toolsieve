@@ -1,6 +1,6 @@
 [project]
 name = "toolsieve"
-version = "0.3.0"
+version = "0.3.1"
 description = "Semantic tool routing for MCP: aggregate your downstream MCP servers, expose three tools instead of a hundred, and get a live token-savings receipt."
 readme = "README.md"
 license = "MIT"
