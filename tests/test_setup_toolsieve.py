@@ -150,3 +150,21 @@ def test_apply_does_not_prompt_when_nothing_is_flagged(monkeypatch, tmp_path):
     )
 
     assert module.cmd_setup("codex", apply=True) == 0
+
+
+def test_a_catalog_too_small_to_route_says_so(monkeypatch, tmp_path):
+    """Scenario: catalog below the break-even size (D22).
+
+    The failure this guards against is a tool that only ever reports wins. Under
+    ~10 tools the sieve genuinely costs more than it saves, and setup time is the
+    only moment that advice can still be acted on.
+    """
+    from toolsieve.setup import WORTH_IT_MIN_TOOLS, worth_it
+
+    assert worth_it(WORTH_IT_MIN_TOOLS) is None
+    assert worth_it(WORTH_IT_MIN_TOOLS + 40) is None
+
+    warning = worth_it(3)
+    assert warning is not None
+    assert "3 tool(s)" in warning
+    assert ".toolsieve-bak" in warning, "must say how to undo, not just that it is bad"

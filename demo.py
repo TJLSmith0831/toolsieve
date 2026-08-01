@@ -72,17 +72,19 @@ async def main() -> int:
         rule("2. Semantic routing")
         for query in QUERIES:
             found = (await client.call_tool("find_tools", {"query": query})).data
-            if not found["matches"]:
+            top = found["tool"]
+            if top is None:
                 print(f"  {query!r} → no matches ({found.get('message', '')})")
                 continue
-            top = found["matches"][0]
             flag = "  ⚠ low confidence" if top.get("confidence") == "low" else ""
+            nearby = sum(len(v) for v in found["also_available"].values())
             print(f"  {query!r}")
             print(f"    → {top['server']}/{top['name']}  (score {top['score']}){flag}")
+            print(f"      + {nearby} nearby tool names, so a wrong pick is one lookup away")
 
         rule("3. Calling one for real")
         found = (await client.call_tool("find_tools", {"query": QUERIES[0]})).data
-        if not found["matches"]:
+        if found["tool"] is None:
             # An empty catalog is the normal shape of a misconfigured run — a bad
             # config, an unset ${VAR}, every backend down. Say which, don't crash.
             print(f"  nothing to call: {found.get('message', 'the catalog is empty')}")
@@ -91,8 +93,8 @@ async def main() -> int:
             for name, reason in (found.get("unavailable_servers") or {}).items():
                 print(f"  server {name!r} unavailable: {reason}")
             return 1
-        top = found["matches"][0]
-        # The schema comes back with the match — that is why call_tool takes args
+        top = found["tool"]
+        # The schema comes back with the top match — that is why call_tool takes args
         # instead of guessing them from the query (D10).
         required = top["input_schema"].get("required", [])
         args = {required[0]: "Boston"} if required else {}

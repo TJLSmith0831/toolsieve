@@ -20,23 +20,38 @@ FIXTURE = {
     "rows": [
         {
             "catalog_size": 181, "method": "naive", "queries": 159, "k": 181,
-            "recall_at_k": 1.0,
+            "recall_at_k": 1.0, "recall_visible": 1.0,
             "recall_by_difficulty": {"ambiguous": 1.0, "exact": 1.0, "paraphrase": 1.0},
             "tokens_if_naive": 6_000_000, "tokens_actual": 6_000_000,
+            "tokens_per_call": 37_735, "expected_calls": 1.0,
+            "tokens_per_resolution": 37_735, "break_even_lookups": 1.0,
             "tokens_saved_pct": 0.0,
         },
         {
             "catalog_size": 181, "method": "bm25", "queries": 159, "k": 3,
-            "recall_at_k": 0.654,
+            "recall_at_k": 0.654, "recall_visible": 0.654,
             "recall_by_difficulty": {"ambiguous": 0.78, "exact": 1.0, "paraphrase": 0.32},
             "tokens_if_naive": 6_000_000, "tokens_actual": 102_000,
+            "tokens_per_call": 642, "expected_calls": 2.038,
+            "tokens_per_resolution": 1_308, "break_even_lookups": 28.8,
+            "tokens_saved_pct": 98.3,
+        },
+        {
+            "catalog_size": 181, "method": "toolsieve-v0.2", "queries": 159, "k": 3,
+            "recall_at_k": 0.849, "recall_visible": 0.849,
+            "recall_by_difficulty": {"ambiguous": 0.6, "exact": 1.0, "paraphrase": 0.7},
+            "tokens_if_naive": 6_000_000, "tokens_actual": 103_000,
+            "tokens_per_call": 648, "expected_calls": 1.302,
+            "tokens_per_resolution": 844, "break_even_lookups": 44.7,
             "tokens_saved_pct": 98.3,
         },
         {
             "catalog_size": 181, "method": "toolsieve", "queries": 159, "k": 3,
-            "recall_at_k": 0.8742,
+            "recall_at_k": 0.8742, "recall_visible": 0.95,
             "recall_by_difficulty": {"ambiguous": 0.5, "exact": 0.98, "paraphrase": 0.9},
             "tokens_if_naive": 6_000_000, "tokens_actual": 100_000,
+            "tokens_per_call": 629, "expected_calls": 1.201,
+            "tokens_per_resolution": 100_000, "break_even_lookups": 62.4,
             "tokens_saved_pct": 98.3,
         },
     ],
@@ -59,7 +74,6 @@ def test_table_is_valid_markdown_with_a_consistent_column_count():
 
 def test_headline_numbers_survive_formatting():
     out = render(FIXTURE)
-    assert "98.3%" in out
     assert "0.87" in out  # recall rounded for display, not truncated to 0.8
     assert "100,000" in out  # thousands separator on token counts
 
@@ -83,12 +97,31 @@ def test_a_partial_run_still_renders_a_table_but_claims_nothing():
     partial = {**FIXTURE, "rows": [FIXTURE["rows"][0]]}
     out = render(partial)
     assert "| 181 " in out
-    assert "fewer tokens" not in out
+    assert "resolves a tool lookup" not in out
 
 
 def test_headline_is_derived_from_the_table_not_hand_written():
     out = render(FIXTURE)
-    assert "98.3% fewer tokens" in out
     assert "181 tools from 25 real MCP servers" in out
     # paraphrase tier, toolsieve 0.90 vs bm25 0.32
     assert "**90%**" in out and "**32%**" in out
+
+
+def test_headline_compares_shapes_on_cost_per_resolution_not_per_call():
+    """The trap this benchmark exists to avoid, asserted.
+
+    v0.2 is *cheaper per call* than the shipped shape in this fixture (648 vs
+    629 is close, but its failures cost four calls). Quoting per-call numbers is
+    what made the rework look like a regression; the headline must quote the
+    per-resolution number instead.
+    """
+    out = render(FIXTURE)
+    assert "844" in out and "100,000" in out  # v0.2 -> shipped, per resolution
+    assert "85% to 95%" in out or "85% to 95" in out or "0.95" in out
+
+
+def test_headline_states_the_break_even_rather_than_hiding_it():
+    """A per-lookup cost beats a one-off load only for so long. Say how long."""
+    out = render(FIXTURE)
+    assert "62 lookups" in out
+    assert "154" in out and "269" in out  # real schema sizes, the conservative-end caveat

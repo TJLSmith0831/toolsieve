@@ -58,15 +58,22 @@ def _router() -> Router:
 async def find_tools(
     query: str, k: int = 3, exclude: list[str] | None = None
 ) -> dict[str, Any]:
-    """Find the tools most relevant to a task, across every aggregated MCP server.
+    """Find the tool to call for a task, across every aggregated MCP server.
 
-    Returns up to k matches, each with its owning server, description, and input
-    schema — enough to call it. Also returns a token-savings receipt comparing
-    this against loading every aggregated tool into context.
+    Returns:
+      - `tool`: the best match, with its input schema — call it via call_tool.
+      - `alternatives`: runners-up, name and description only (no schema).
+      - `also_available`: every nearby tool *name*, grouped by server. Read this
+        before reformulating: if the tool you had in mind is not listed, it does
+        not exist, and rewording the query will not conjure it.
+      - `servers`: every aggregated server and its tool count.
 
-    A weak match is returned with `confidence: "low"` rather than withheld — check
-    its description and schema before using it. If a returned tool is wrong, call
-    again with exclude=["<server>/<tool_name>"] to rule it out.
+    To get the schema for a tool you saw in `also_available` or `alternatives`,
+    call again with its exact name as the query — exact names are matched
+    directly, not ranked.
+
+    A weak match is returned with `confidence: "low"` rather than withheld. If a
+    returned tool is wrong, call again with exclude=["<server>/<tool_name>"].
     """
     router = _router()
     result = router.find(query, k=k, exclude=exclude)
@@ -83,10 +90,17 @@ def _attach_config_error(result: dict[str, Any]) -> None:
     which no MCP client shows you. That was survivable when every backend was a
     local stdio process; a remote one can be down, moved, or holding an expired
     token, so the client needs to be told why its tools vanished.
+
+    Also stamps which catalog answered (D21). Two toolsieve instances in one
+    session — the global plugin and a project-scoped one — are indistinguishable
+    from the client's side, so a mis-routed call used to look like a correct
+    answer from an empty catalog. Naming the config in the response makes the
+    mistake self-evident instead of silent.
     """
     aggregator: Aggregator | None = _state["aggregator"]
     if aggregator is None:
         return
+    result["catalog"] = str(_config_path())
     if aggregator.config_error is not None:
         result["config_error"] = (
             f"toolsieve has no usable config, so nothing is aggregated: "
@@ -146,7 +160,46 @@ async def get_savings_report() -> dict[str, Any]:
 async def _reindex(catalog: Catalog) -> None:
     """Rebuild the embedding index after the catalog is swapped (D8)."""
     _state["router"] = Router(catalog.tools, confidence_threshold=_threshold())
+    await _label_instance()
     log.info("reindexed after config reload: %d tools", len(catalog.tools))
+
+
+# Descriptions are rewritten on every reload, so the originals are kept here
+# rather than re-read from the (already rewritten) live tool.
+_BASE_DESCRIPTIONS: dict[str, str] = {}
+
+
+async def _label_instance() -> None:
+    """Tell this toolsieve apart from any other one in the same session (D21).
+
+    A globally-installed toolsieve plugin and a project-scoped toolsieve publish
+    the same three tool names with the same three descriptions. A client has
+    nothing to choose between them on, so it picks one — and if it picks the one
+    whose catalog lacks the server the task needs, the honest answer ("that
+    server is not configured") is indistinguishable from the truth ("it is, in
+    the other instance"). Stamping the config path and server list into the
+    descriptions gives the client the one fact that separates them.
+    """
+    aggregator: Aggregator | None = _state["aggregator"]
+    servers = sorted({t.server for t in aggregator.catalog.tools}) if aggregator else []
+    label = (
+        f"[catalog: {_config_path()} — {len(servers)} server(s): "
+        f"{', '.join(servers) or 'none reachable'}]\n"
+        "If more than one toolsieve is connected, each serves a different catalog; "
+        "pick the one whose servers you need."
+    )
+    mcp.instructions = (
+        "toolsieve routes across all your aggregated MCP servers. Call find_tools "
+        "with a natural-language description of what you want to do, then call "
+        "call_tool with the server, tool_name, and args from the match you picked. "
+        "find_tools also returns `also_available` — the names of every nearby tool. "
+        "Read it before rewording a query: a tool that is not listed does not exist.\n"
+        f"{label}"
+    )
+    for name in ("find_tools", "call_tool", "get_savings_report"):
+        tool = await mcp.get_tool(name)
+        base = _BASE_DESCRIPTIONS.setdefault(name, tool.description or "")
+        tool.description = f"{base}\n\n{label}"
 
 
 def _threshold() -> float:
@@ -163,6 +216,7 @@ async def _startup() -> None:
     await aggregator.start()
     _state["aggregator"] = aggregator
     _state["router"] = Router(aggregator.catalog.tools, confidence_threshold=_threshold())
+    await _label_instance()
 
 
 def main() -> None:
