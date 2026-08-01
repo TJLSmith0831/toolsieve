@@ -62,22 +62,36 @@ def rows():
     return run(TOOLS, QUERIES, sizes=[3, None], embedder=FakeEmbedder())
 
 
+METHODS = ("naive", "bm25", "toolsieve-v0.2", "toolsieve")
+
+
 def test_one_row_per_method_per_catalog_size(rows):
     """Spec: `results.json` contains one row per (catalog size, method) pair."""
-    assert len(rows) == 2 * 3
+    assert len(rows) == 2 * len(METHODS)
     assert {(r["catalog_size"], r["method"]) for r in rows} == {
-        (size, method)
-        for size in (3, len(TOOLS))
-        for method in ("naive", "bm25", "toolsieve")
+        (size, method) for size in (3, len(TOOLS)) for method in METHODS
     }
 
 
 def test_every_row_carries_recall_and_tokens_saved(rows):
     for row in rows:
         assert 0.0 <= row["recall_at_k"] <= 1.0
-        assert 0.0 <= row["tokens_saved_pct"] <= 100.0
+        assert 0.0 <= row["recall_visible"] <= 1.0
+        # Not bounded below at 0: a catalog smaller than one response costs more
+        # to route than to hand over whole. See the size-3 rows.
+        assert row["tokens_saved_pct"] <= 100.0
         assert row["tokens_if_naive"] > 0
         assert row["recall_by_difficulty"]
+
+
+def test_a_tool_is_never_callable_without_being_visible(rows):
+    """`recall_visible` counts names *and* schemas, so it can only be the larger.
+
+    If this inverts, `delivered()` has stopped folding the top match into the
+    visible set and every visible-recall number in RESULTS.md is understated.
+    """
+    for row in rows:
+        assert row["recall_visible"] >= row["recall_at_k"], row["method"]
 
 
 def test_naive_delivers_everything_so_it_never_misses_and_never_saves(rows):
@@ -91,12 +105,33 @@ def test_naive_delivers_everything_so_it_never_misses_and_never_saves(rows):
 def test_ranked_methods_deliver_top_k_and_save_once_the_catalog_exceeds_it(rows):
     """A catalog of 3 routed to 3 saves nothing — that is the whole reason the
     benchmark sweeps catalog sizes rather than quoting one."""
-    for row in [r for r in rows if r["method"] in ("bm25", "toolsieve")]:
+    for row in [r for r in rows if r["method"] in ("bm25", "toolsieve-v0.2")]:
         assert row["k"] <= 3
-        if row["catalog_size"] > 3:
-            assert row["tokens_saved_pct"] > 0
-        else:
-            assert row["tokens_saved_pct"] == 0.0
+        assert row["tokens_saved_pct"] > 0 if row["catalog_size"] > 3 else True
+
+
+def test_sieving_a_tiny_catalog_costs_more_than_it_saves(rows):
+    """Routing has a floor price, and below it the honest answer is "don't".
+
+    The shipped router spends tokens on a roster and headlines that a 3-tool
+    catalog does not need — it would have been cheaper to hand all 3 over. This
+    is asserted rather than hidden because the README's "when not to use this"
+    has to stay true, and because a silently-negative saving is exactly the kind
+    of number a benchmark should refuse to round up to zero.
+    """
+    tiny = next(r for r in rows if r["method"] == "toolsieve" and r["catalog_size"] == 3)
+    assert tiny["tokens_saved_pct"] < 0
+    big = next(r for r in rows if r["method"] == "toolsieve" and r["catalog_size"] == len(TOOLS))
+    assert big["tokens_saved_pct"] > tiny["tokens_saved_pct"]
+
+
+def test_shipped_shape_returns_one_schema_and_sees_more_than_it_delivers(rows):
+    """The D20 trade, in one assertion: fewer schemas, wider visibility."""
+    new = next(r for r in rows if r["method"] == "toolsieve" and r["catalog_size"] == len(TOOLS))
+    old = next(r for r in rows if r["method"] == "toolsieve-v0.2" and r["catalog_size"] == len(TOOLS))
+    assert new["k"] == 1.0, "only the top match ships with a schema"
+    assert old["k"] > new["k"], "v0.2 shipped a schema per match"
+    assert new["recall_visible"] >= old["recall_visible"]
 
 
 def test_toolsieve_row_used_the_fake_embedder_and_still_ranked(rows):

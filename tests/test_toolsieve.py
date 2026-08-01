@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from toolsieve.aggregator import Aggregator, DownstreamError  # noqa: E402
+from toolsieve.aggregator import AggregatedTool, Aggregator, DownstreamError  # noqa: E402
 from toolsieve.config import (  # noqa: E402
     ConfigError,
     ServerConfig,
@@ -530,53 +530,156 @@ def router(tmp_path_factory):
 def test_query_matches_the_right_tool(router):
     """Scenario: Query matches an aggregated tool."""
     result = router.find("what is the temperature outside today", k=3)
-    assert result["matches"], result.get("message")
-    top = result["matches"][0]
+    top = result["tool"]
+    assert top is not None, result.get("message")
     assert top["name"] == "get_weather"
     assert top["server"] == "docs"
     assert "city" in json.dumps(top["input_schema"])  # schema returned, so it's callable
 
 
+def test_only_the_top_match_carries_a_schema(router):
+    """The token fix (D20): schemas are ~85% of a response, so k-1 go unshipped.
+
+    Returning a schema per match is what made v0.2 cost ~1.7k tokens a query.
+    Runners-up are name + description, which is enough to *choose* one; the
+    schema is a separate, exact-name lookup away.
+    """
+    result = router.find("what is the temperature outside today", k=3)
+    assert result["tool"]["input_schema"], "the tool you are told to call must be callable"
+    assert result["alternatives"], "this catalog has a runner-up to report"
+    for alt in result["alternatives"]:
+        assert "input_schema" not in alt
+        assert alt["name"] and alt["description"]
+
+
+def test_roster_names_every_tool_so_absence_is_provable(router):
+    """Negative knowledge (D20) — the fix for the smoke test's reformulation loop.
+
+    A client that cannot see what exists cannot tell "ranked low" from "does not
+    exist", so it rewords the query and pays for another search. The roster is
+    names only, so this costs a fraction of one schema.
+    """
+    result = router.find("something completely unrelated to this catalog", k=1)
+    listed = {name for names in result["also_available"].values() for name in names}
+    assert listed == {"get_weather", "search_docs"}
+    assert set(result["also_available"]) == {"docs"}  # grouped by owning server
+    # The server map rides along too: the roster answers "does this tool exist",
+    # this answers "which server should I be asking about at all". Dropping it
+    # measurably cost round trips in the live A/B.
+    assert result["servers"] == {"docs": 2}
+
+
+def test_exact_name_query_returns_that_tools_schema(router):
+    """A name spotted in `also_available` must resolve in one deterministic hop.
+
+    Ranking is probabilistic; this path is not. Without it, acting on the roster
+    would mean hoping the embedder agrees with a choice already made.
+    """
+    for key in ("search_docs", "docs/search_docs"):
+        tool = router.find(key, k=1)["tool"]
+        assert (tool["server"], tool["name"]) == ("docs", "search_docs"), key
+        assert tool["score"] == 1.0
+        assert "confidence" not in tool  # an exact hit is never "low"
+
+
 def test_weak_match_is_flagged_not_withheld(router):
     """Scenario: Query matches only weakly (D11 amended)."""
     result = router.find("refinance a thirty year fixed rate mortgage", k=1)
-    assert result["matches"], "a usable tool must never be withheld for low confidence"
-    assert result["matches"][0]["confidence"] == "low"
-    assert result["matches"][0]["score"] < router.confidence_threshold
+    assert result["tool"], "a usable tool must never be withheld for low confidence"
+    assert result["tool"]["confidence"] == "low"
+    assert result["tool"]["score"] < router.confidence_threshold
     assert "Low confidence" in result["message"]
+    # The nudge that ends the loop: check the roster before rewording.
+    assert "also_available" in result["message"]
 
 
 def test_strong_match_is_not_flagged(router):
     """The confidence tag must actually discriminate, not tag everything."""
-    top = router.find("search the documentation", k=1)["matches"][0]
+    result = router.find("search the documentation", k=1)
+    top = result["tool"]
     assert "confidence" not in top
     assert top["score"] >= router.confidence_threshold
+    assert "Low confidence" not in result["message"]
+
+
+def test_a_confident_match_still_points_at_the_roster(router):
+    """Confidently-wrong is the failure that costs round trips (D20 amended).
+
+    In the live smoke re-run the top match for "get repository details" was
+    `get_tag`, scoring above the threshold, so no guidance was attached — while
+    `search_repositories` sat ninth in `also_available`. The client rephrased
+    three more times. A score cannot detect a wrong-but-plausible match, so the
+    pointer has to ride on every response, not just the ones that look shaky.
+    """
+    result = router.find("search the documentation", k=1)
+    assert "confidence" not in result["tool"], "this fixture must be the confident path"
+    assert "also_available" in result["message"]
+    assert "does not exist" in result["message"]
+    assert "do not reword" in result["message"]
 
 
 def test_excluded_tool_is_withheld(router):
     """Scenario: Client rejects a returned tool."""
     query = "what is the temperature outside today"
-    first = router.find(query, k=1)["matches"][0]
+    first = router.find(query, k=1)["tool"]
     assert first["name"] == "get_weather"
 
     result = router.find(query, k=1, exclude=[f"{first['server']}/{first['name']}"])
-    names = [m["name"] for m in result["matches"]]
-    assert "get_weather" not in names
-    assert names == ["search_docs"]  # falls through to the next-best real tool
+    assert result["tool"]["name"] == "search_docs"  # next-best real tool
+    listed = {name for names in result["also_available"].values() for name in names}
+    assert "get_weather" not in listed  # excluded from the roster too, not just the match
 
 
-def test_empty_catalog_returns_empty_matches():
+def test_empty_catalog_returns_no_tool():
     """The only remaining empty-result path: nothing to match against."""
     result = Router([]).find("anything at all", k=3)
-    assert result["matches"] == []
+    assert result["tool"] is None
+    assert result["alternatives"] == []
     assert "empty" in result["message"]
 
 
 def test_per_call_savings_metadata(router):
-    """Scenario: Per-call savings metadata."""
+    """Scenario: Per-call savings metadata.
+
+    This fixture's catalog is 2 tools, which is below the size where routing
+    pays for itself — so the receipt reports a *negative* saving, and must. A
+    response has a floor price (schema + roster + guidance) that a catalog this
+    small does not clear. `toolsieve-setup --verify` warns about exactly this.
+    """
     savings = router.find("what is the weather", k=1)["savings"]
+    assert savings["tokens_actual"] > 0
+    assert savings["tokens_actual"] > savings["tokens_if_naive"], "2 tools: routing loses"
+    assert savings["saved_pct"] < 0, "and the receipt must say so rather than clamp to 0"
+
+
+def test_savings_are_positive_once_the_catalog_is_worth_sieving(tmp_path_factory):
+    """The same receipt, on a catalog big enough to route. The claim, minimally."""
+    tools = [
+        AggregatedTool(
+            server="big",
+            name=f"tool_{i}",
+            description=f"Does thing number {i} with several documented parameters.",
+            input_schema={"type": "object", "properties": {f"p{i}": {"type": "string"}}},
+        )
+        for i in range(60)
+    ]
+    savings = Router(tools).find("do thing number 7", k=3)["savings"]
     assert savings["tokens_if_naive"] > savings["tokens_actual"] > 0
-    assert savings["saved_pct"] > 0
+    assert savings["saved_pct"] > 50
+
+
+def test_savings_receipt_counts_everything_it_shipped(router):
+    """The receipt must not flatter itself by hiding any part of the response.
+
+    The roster and the guidance line are real tokens the client pays for. Only
+    `savings` itself is excluded, and only because it cannot contain its own
+    size.
+    """
+    result = router.find("what is the weather", k=3)
+    counted = {k: v for k, v in result.items() if k != "savings"}
+    assert set(counted) == {"tool", "alternatives", "also_available", "servers", "message"}
+    # chars/4, the same estimator the receipt uses — so this is exact, not fuzzy.
+    assert result["savings"]["tokens_actual"] == len(json.dumps(counted)) // 4
 
 
 def test_session_savings_report_accumulates():
@@ -623,7 +726,7 @@ def test_server_end_to_end(tmp_path):
         async with Client(transport) as client:
             exposed = sorted(t.name for t in await client.list_tools())
             found = (await client.call_tool("find_tools", {"query": "the weather today"})).data
-            top = found["matches"][0]
+            top = found["tool"]
             called = (
                 await client.call_tool(
                     "call_tool",
@@ -639,7 +742,7 @@ def test_server_end_to_end(tmp_path):
     assert exposed == ["call_tool", "find_tools", "get_savings_report"]
     assert report["tools_aggregated"] == 4
 
-    assert found["matches"][0]["name"] == "get_weather"
+    assert found["tool"]["name"] == "get_weather"
     assert called["ok"] is True
     assert called["result"] == "sunny in Boston"  # structured payload survived
     assert report["find_tools_calls"] == 1
@@ -672,3 +775,54 @@ def test_failed_server_is_visible_to_the_client(tmp_path):
     report = asyncio.run(run())
     assert "dead" in report["unavailable_servers"]
     assert report["tools_aggregated"] == 2  # the healthy server is still usable
+
+
+def test_two_instances_are_distinguishable(tmp_path):
+    """Scenario: two toolsieve instances in one session (D21).
+
+    Found in the pre-release smoke test: a globally-installed toolsieve plugin
+    and a project-scoped toolsieve published identical tool names *and* identical
+    descriptions. The client had nothing to choose on, picked one, and reported
+    a server as unconfigured when it was configured — in the other instance.
+    Both the advertised descriptions and the responses must name their catalog.
+    """
+    import os
+
+    from fastmcp import Client
+    from fastmcp.client.transports import StdioTransport
+
+    root = Path(__file__).resolve().parents[1]
+    configs = {
+        "weather-only": write_config(tmp_path / "a.json", {"weather": good("weather")}),
+        "docs-only": write_config(tmp_path / "b.json", {"docs": good("docs")}),
+    }
+
+    async def probe(cfg: Path):
+        transport = StdioTransport(
+            command=sys.executable,
+            args=["-m", "toolsieve"],
+            cwd=str(root),
+            env={**os.environ, "TOOLSIEVE_CONFIG": str(cfg)},
+        )
+        async with Client(transport) as client:
+            described = {t.name: t.description for t in await client.list_tools()}
+            found = (await client.call_tool("find_tools", {"query": "weather"})).data
+            return described, found
+
+    async def run():
+        return {name: await probe(cfg) for name, cfg in configs.items()}
+
+    probed = asyncio.run(run())
+    (desc_a, found_a) = probed["weather-only"]
+    (desc_b, found_b) = probed["docs-only"]
+
+    # What the client picks between, before it calls anything.
+    assert desc_a["find_tools"] != desc_b["find_tools"]
+    for name in ("find_tools", "call_tool", "get_savings_report"):
+        assert str(configs["weather-only"]) in desc_a[name]
+        assert "weather" in desc_a[name]
+        assert str(configs["docs-only"]) in desc_b[name]
+
+    # And after: a response says which catalog answered it.
+    assert found_a["catalog"] == str(configs["weather-only"])
+    assert found_b["catalog"] == str(configs["docs-only"])

@@ -1,13 +1,25 @@
 {
-  "_comment": "Self-contained demo config: two real stdio MCP servers this repo ships, so `uv run python demo.py` works on a fresh clone with nothing else installed and no network access. Savings look small here because the catalog is tiny — point TOOLSIEVE_CONFIG at your own servers to see the real number. For an HTTP/SSE entry, see toolsieve.config.example.json.",
+  "_comment": "Self-contained demo config: two real stdio MCP servers this repo ships, so `uv run python demo.py` works on a fresh clone with nothing else installed and no network access. `--catalog` gives each a realistic roster, because routing a 4-tool catalog is below the size where a sieve pays for itself and would demo the product at its worst. Point TOOLSIEVE_CONFIG at your own servers for your own number. For an HTTP/SSE entry, see toolsieve.config.example.json.",
   "mcpServers": {
     "docs": {
       "command": "uv",
-      "args": ["run", "python", "tests/fake_server.py", "docs"]
+      "args": [
+        "run",
+        "python",
+        "tests/fake_server.py",
+        "docs",
+        "--catalog"
+      ]
     },
     "weather": {
       "command": "uv",
-      "args": ["run", "python", "tests/fake_server.py", "weather"]
+      "args": [
+        "run",
+        "python",
+        "tests/fake_server.py",
+        "weather",
+        "--catalog"
+      ]
     }
   }
 }

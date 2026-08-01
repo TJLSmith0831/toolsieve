@@ -6,7 +6,7 @@ FastMCP.
 
 ## Commands (verified 2026-07-27)
 - Install: `uv sync --group bench` (bench group adds tiktoken + rank-bm25, needed by benchmark tests)
-- Test all: `uv run pytest -q` — 85 tests, real MCP servers over stdio + local HTTP, no mocks, no network egress
+- Test all: `uv run --group bench pytest -q` — 169 tests (suite + benchmark units), real MCP servers over stdio + local HTTP, no mocks, no network egress. Plain `uv run pytest -q` skips `benchmarks/`, which needs the bench group
 - Test one file: `uv run pytest -q tests/test_setup_toolsieve.py`
 - Demo end-to-end, no config needed: `uv run python demo.py`
 - No lint/typecheck is configured — don't go looking for a `ruff`/`mypy` invocation, there isn't one
@@ -15,7 +15,7 @@ FastMCP.
 ## Map
 - `toolsieve/server.py` — MCP entry point; the 3 exposed tools live here
 - `toolsieve/aggregator.py` — connects to every downstream server, builds the tool `Catalog`
-- `toolsieve/router.py` — embedding match + `Savings`/token accounting
+- `toolsieve/router.py` — embedding match + `Savings`/token accounting. `rank()` is the ranking seam; `find()` composes the response shape (D20) — one schema, headline alternatives, and `also_available`, the roster of nearby tool *names* that lets a client prove a tool does not exist instead of rewording
 - `toolsieve/config.py` — `mcpServers`-shaped config + `.env` loading (GH #6)
 - `toolsieve/oauth.py` — token store + the browser-less `NonInteractiveOAuth` the server uses
 - `toolsieve/auth_cli.py` — the `toolsieve-auth` console script: the only place a browser opens
@@ -49,3 +49,46 @@ FastMCP.
 - Contribution workflow, PR title prefixes: `CONTRIBUTING.md`
 - Benchmark methodology and numbers: README `## Benchmarks`, `benchmarks/RESULTS.md`
 - Config shape, env vars, auth: README `## Configuration`
+
+## Measuring token burn (read before quoting a number)
+- **Tokens per *call* is the wrong meter.** A shape that answers cheaply but misses
+  often just moves the cost to the next call. Compare on `tokens_per_resolution`
+  in `benchmarks/results.json`. Judged per call, the pre-v0.3 shape looks better
+  than the one that replaced it; judged per resolution at real schema sizes, it
+  is not. That mistake was made once already.
+- **`benchmarks/catalog.json` schemas are ~80 tok/tool — unrepresentative.** Live
+  public MCP servers measure ~154 and GitHub-heavy ~269. The benchmark reprices
+  at all three (`repriced` per row, "Schema-size sensitivity" in RESULTS.md);
+  quote the repriced figures, not the raw catalog ones.
+- **The query set has no "tool does not exist" case**, which is the case that cost
+  the most in reality. The benchmark therefore *understates* the roster's value —
+  the live A/B is the measurement for that.
+- **Live A/B**: `toolsieve-smoke/smoke/rerun_arm2.sh`, with
+  `TOOLSIEVE_SRC=<checkout>`. Re-runs arm 2 only (arm 1 is Claude Code's own tool
+  search and has not changed), writes `arm2new-run*.json`, costs ~$1.70 for 3 runs.
+
+## Dynamic tool registration — tested, does not work (2026-07-31)
+Promoting a found tool into a real MCP tool (`add_tool` +
+`notifications/tools/list_changed`) closes the measured gap against a client's
+own tool search on paper: their search returns a pointer the API expands into
+*cached* tool definitions (~99 tok/call), ours returns the schema inline in the
+conversation (~808 tok/call). The extra proxy hop is not the gap — it costs ~33
+tokens a run.
+
+The mechanism works at the protocol level, verified end to end through a real
+MCP client: tool registered, downstream schema passed through, notification
+observed on the wire. **Claude Code ignores it.** Asked directly, mid-session,
+after a `find_tools` call that returned `callable_as`, a live session reported
+exactly three `mcp__toolsieve__*` tools and no promoted one — it snapshots MCP
+tools at connect time. Reverted rather than shipped as dead weight (see the
+revert of `feat: promote a found tool into a real one` for the working code).
+
+Two notes for whoever revisits this:
+- `Tool.from_function` rejects `**kwargs`; construct `FunctionTool` directly to
+  pass a downstream JSON schema through unaltered.
+- A promoted tool needs the downstream `outputSchema` too, or structured results
+  silently flatten to text — the D18 failure again.
+- The only variant that could work against a connect-time snapshot is
+  registering a *persisted* working set at startup: learn which tools a project
+  actually uses, register those statically next session, keep find_tools for the
+  tail. Not attempted.

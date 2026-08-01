@@ -58,6 +58,41 @@ def search_docs(query: str) -> str:
     return f"docs matching {query}"
 
 
+# `--catalog` adds a realistic roster on top of the two tools above. Only demo.py
+# uses it: routing a 4-tool catalog saves ~5%, which is a true number and a
+# terrible demonstration, because 4 tools is below the size where a sieve pays
+# for itself at all. The tests keep the 2-tool default, which several of them
+# assert on directly.
+CATALOG = {
+    "create_issue": ("Create a new issue in a repository with a title and body.", "title"),
+    "list_issues": ("List issues in a repository, filtered by state and label.", "state"),
+    "get_issue": ("Read one issue by number, with its body and current labels.", "number"),
+    "create_pull_request": ("Open a pull request from a head branch into a base branch.", "head"),
+    "merge_pull_request": ("Merge an open pull request using the given merge method.", "number"),
+    "list_commits": ("List commits on a branch, newest first, with author and message.", "branch"),
+    "read_file": ("Read the complete contents of a file from the filesystem.", "path"),
+    "write_file": ("Write content to a file, creating or overwriting it.", "path"),
+    "list_directory": ("List the files and subdirectories inside a directory.", "path"),
+    "move_file": ("Move or rename a file or directory to a new location.", "source"),
+    "send_message": ("Post a message to a channel or direct message conversation.", "channel"),
+    "list_channels": ("List the channels in the workspace that are visible to you.", "cursor"),
+    "create_page": ("Create a page in the workspace under a parent page.", "title"),
+    "query_database": ("Query a database with a filter and sort, returning matching rows.", "filter"),
+    "run_sql": ("Execute a read-only SQL statement against the connected database.", "sql"),
+    "list_tables": ("List the tables in a schema, with their row counts.", "schema"),
+    "capture_screenshot": ("Take a screenshot of the current browser page.", "selector"),
+    "navigate_to": ("Navigate the browser to a URL and wait for it to load.", "url"),
+}
+
+if "--catalog" in sys.argv:
+    for _name, (_summary, _param) in CATALOG.items():
+        # Default-arg binding, not closure capture: a bare closure over the loop
+        # variables would give every tool the last entry's name.
+        mcp.tool(name=_name, description=_summary)(
+            lambda value="", _n=_name, _p=_param: f"{_n} ran with {_p}={value}"
+        )
+
+
 if __name__ == "__main__":
     if "--http" in sys.argv:
         from fastmcp.server.dependencies import get_http_headers
