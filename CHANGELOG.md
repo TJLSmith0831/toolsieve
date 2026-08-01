@@ -6,6 +6,19 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-01
+
+### Added
+- Make toolsieve pip/uvx-installable with a portable migrate flow ([#18](https://github.com/TJLSmith0831/toolsieve/pull/18))
+- Support OAuth-authenticated downstream MCP servers ([#19](https://github.com/TJLSmith0831/toolsieve/pull/19))
+- Add Devin support and project-scoped configs for every client that has one ([#20](https://github.com/TJLSmith0831/toolsieve/pull/20))
+
+### Changed
+- Add .env to .gitignore ([#17](https://github.com/TJLSmith0831/toolsieve/pull/17))
+
+### Fixed
+- Cut find_tools tokens per resolved lookup, not just per call ([#22](https://github.com/TJLSmith0831/toolsieve/pull/22))
+
 ## [0.2.1] - 2026-07-27
 
 ### Added
