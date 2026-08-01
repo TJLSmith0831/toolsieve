@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-01
+
+### Changed
+- Bump version to 0.3.1 and update the README version badge ([#24](https://github.com/TJLSmith0831/toolsieve/pull/24))
+
 ## [0.3.0] - 2026-08-01
 
 ### Added
